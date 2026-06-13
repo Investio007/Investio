@@ -1,0 +1,79 @@
+name: Backend CI
+
+on:
+  push:
+    paths:
+      - "server/**"
+      - ".github/workflows/backend-ci.yml"
+  pull_request:
+    paths:
+      - "server/**"
+      - ".github/workflows/backend-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+        shell: bash
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: server/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Verify main.py imports
+        run: python -c "import main; print('main.py imports OK')"
+
+      - name: Start server and smoke test endpoints
+        run: |
+          set -euo pipefail
+
+          uvicorn main:app --host 127.0.0.1 --port 8000 &
+          SERVER_PID=$!
+
+          cleanup() {
+            kill "$SERVER_PID" 2>/dev/null || true
+            wait "$SERVER_PID" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+
+          ready=false
+          for i in $(seq 1 45); do
+            if curl -sf http://127.0.0.1:8000/api/health > /dev/null; then
+              echo "Server ready after ${i}s"
+              ready=true
+              break
+            fi
+            sleep 1
+          done
+
+          if [ "$ready" != "true" ]; then
+            echo "Server did not become ready in time"
+            exit 1
+          fi
+
+          python - <<'PY'
+          import sys
+          import urllib.request
+
+          health = urllib.request.urlopen("http://127.0.0.1:8000/api/health").read().decode()
+          cache = urllib.request.urlopen("http://127.0.0.1:8000/api/cache/status").read().decode()
+
+          assert '"status":"ok"' in health or '"status": "ok"' in health, health
+          assert "cached_keys" in cache, cache
+          print("Health and cache endpoints OK")
+          PY
