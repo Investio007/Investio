@@ -4,8 +4,14 @@ import { TrendingUp } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
+import { SocialAuthButtons } from "../components/SocialAuthButtons";
 import { isSupabaseConfigured } from "../../lib/supabase";
-import { signInWithEmail, signUpWithEmail } from "../services/supabaseDb";
+import {
+  signInWithEmail,
+  signInWithOAuth,
+  signUpWithEmail,
+  type OAuthProvider,
+} from "../services/supabaseDb";
 
 export function AuthScreen() {
   const [isLogin, setIsLogin] = useState(false);
@@ -13,7 +19,30 @@ export function AuthScreen() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [oauthLoading, setOauthLoading] = useState<OAuthProvider | null>(null);
   const navigate = useNavigate();
+
+  const handleOAuth = async (provider: OAuthProvider) => {
+    setError("");
+
+    if (!isSupabaseConfigured) {
+      setError("Connect Supabase in .env to use Google or Apple sign in.");
+      return;
+    }
+
+    setOauthLoading(provider);
+
+    try {
+      const { error: oauthError } = await signInWithOAuth(provider);
+      if (oauthError) {
+        setError(oauthError.message);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong.");
+    } finally {
+      setOauthLoading(null);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -101,17 +130,36 @@ export function AuthScreen() {
         {!isSupabaseConfigured && (
           <p className="text-xs text-[#FFB612] bg-[#FFB612]/10 rounded-xl p-3 mb-4">
             Supabase is not connected yet. Add your project URL and anon key to
-            `.env`, then restart the app. Until then, data stays on this device
-            only.
+            `.env`, then restart the app. Google and Apple sign in require
+            Supabase — until then, use email or demo mode below.
           </p>
         )}
 
+        {error && (
+          <div style={{ color: "#E03A3E", fontSize: 12, marginBottom: 8 }}>
+            {error}
+          </div>
+        )}
+
+        <SocialAuthButtons
+          disabled={loading}
+          loadingProvider={oauthLoading}
+          onGoogleClick={() => handleOAuth("google")}
+          onAppleClick={() => handleOAuth("apple")}
+        />
+
+        <div className="relative my-8">
+          <div className="absolute inset-0 flex items-center">
+            <span className="w-full border-t border-gray-200" />
+          </div>
+          <div className="relative flex justify-center text-xs uppercase">
+            <span className="bg-white px-3 text-gray-500">
+              or {isLogin ? "sign in" : "sign up"} with email
+            </span>
+          </div>
+        </div>
+
         <form onSubmit={handleSubmit} className="space-y-6">
-          {error && (
-            <div style={{ color: "#E03A3E", fontSize: 12, marginBottom: 8 }}>
-              {error}
-            </div>
-          )}
           <div className="space-y-2">
             <Label htmlFor="email" className="text-[#0A1F44]">
               Email
@@ -124,7 +172,7 @@ export function AuthScreen() {
               onChange={(e) => setEmail(e.target.value)}
               className="h-14 rounded-2xl bg-[#F5F7FA] border-0 text-[#0A1F44] placeholder:text-gray-400"
               required
-              disabled={loading}
+              disabled={loading || oauthLoading !== null}
             />
           </div>
 
@@ -140,13 +188,13 @@ export function AuthScreen() {
               onChange={(e) => setPassword(e.target.value)}
               className="h-14 rounded-2xl bg-[#F5F7FA] border-0 text-[#0A1F44] placeholder:text-gray-400"
               required
-              disabled={loading}
+              disabled={loading || oauthLoading !== null}
             />
           </div>
 
           <Button
             type="submit"
-            disabled={loading}
+            disabled={loading || oauthLoading !== null}
             className="w-full bg-[#0A1F44] hover:bg-[#0A1F44]/90 text-white h-14 rounded-2xl text-lg mt-8"
           >
             {loading ? "Please wait..." : isLogin ? "Sign In" : "Sign Up"}
@@ -160,7 +208,7 @@ export function AuthScreen() {
                 setError("");
               }}
               className="text-gray-600 hover:text-[#0A1F44]"
-              disabled={loading}
+              disabled={loading || oauthLoading !== null}
             >
               {isLogin
                 ? "Don't have an account? "

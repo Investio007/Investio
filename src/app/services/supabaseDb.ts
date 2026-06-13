@@ -116,6 +116,23 @@ export async function signInWithEmail(email: string, password: string) {
   return client.auth.signInWithPassword({ email, password });
 }
 
+export type OAuthProvider = "google" | "apple";
+
+export async function signInWithOAuth(provider: OAuthProvider) {
+  const client = requireClient();
+  const redirectTo =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/auth/callback`
+      : undefined;
+
+  return client.auth.signInWithOAuth({
+    provider,
+    options: {
+      redirectTo,
+    },
+  });
+}
+
 export async function signOutUser() {
   const client = requireClient();
   return client.auth.signOut();

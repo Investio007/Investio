@@ -1,0 +1,52 @@
+name: Sync OAuth Providers to Supabase
+
+# Run manually after adding secrets: Actions → Sync OAuth Providers → Run workflow
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sync-oauth:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate required secrets
+        run: |
+          if [ -z "${{ secrets.SUPABASE_ACCESS_TOKEN }}" ]; then
+            echo "::error::Missing SUPABASE_ACCESS_TOKEN — create at https://supabase.com/dashboard/account/tokens"
+            exit 1
+          fi
+          if [ -z "${{ secrets.SUPABASE_PROJECT_REF }}" ]; then
+            echo "::error::Missing SUPABASE_PROJECT_REF (e.g. hqzxlitlibxltvsrqhnj)"
+            exit 1
+          fi
+          echo "Required Supabase secrets present."
+
+      - name: Sync Google, GitHub, and Apple OAuth to Supabase
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+          AUTH_SITE_URL: ${{ secrets.AUTH_SITE_URL }}
+          AUTH_REDIRECT_URLS: ${{ secrets.AUTH_REDIRECT_URLS }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GITHUB_OAUTH_CLIENT_ID: ${{ secrets.GITHUB_OAUTH_CLIENT_ID }}
+          GITHUB_OAUTH_CLIENT_SECRET: ${{ secrets.GITHUB_OAUTH_CLIENT_SECRET }}
+          APPLE_CLIENT_ID: ${{ secrets.APPLE_CLIENT_ID }}
+          APPLE_CLIENT_SECRET: ${{ secrets.APPLE_CLIENT_SECRET }}
+        run: node scripts/sync-oauth-to-supabase.mjs
+
+      - name: Summary
+        if: success()
+        run: |
+          REF="${{ secrets.SUPABASE_PROJECT_REF }}"
+          echo "### OAuth sync complete" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Use this **Authorization callback URL** in Google, GitHub, and Apple developer consoles:" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`https://${REF}.supabase.co/auth/v1/callback\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Then test sign in at \`http://localhost:5173/auth\`" >> "$GITHUB_STEP_SUMMARY"
