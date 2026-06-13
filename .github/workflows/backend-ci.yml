@@ -6,9 +6,7 @@ on:
       - "server/**"
       - ".github/workflows/backend-ci.yml"
   pull_request:
-    paths:
-      - "server/**"
-      - ".github/workflows/backend-ci.yml"
+    # Run on every PR so required branch protection checks always report status
 
 permissions:
   contents: read

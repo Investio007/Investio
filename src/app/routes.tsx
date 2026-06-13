@@ -2,6 +2,7 @@ import { createBrowserRouter, Navigate } from "react-router";
 import { SplashScreen } from "./screens/SplashScreen";
 import { OnboardingScreen } from "./screens/OnboardingScreen";
 import { AuthScreen } from "./screens/AuthScreen";
+import { AuthCallbackScreen } from "./screens/AuthCallbackScreen";
 import { HomeScreen } from "./screens/HomeScreen";
 import { StockAnalysisScreen } from "./screens/StockAnalysisScreen";
 import { PortfolioBuilderScreen } from "./screens/PortfolioBuilderScreen";
@@ -25,6 +26,10 @@ export const router = createBrowserRouter([
   {
     path: "/auth",
     Component: AuthScreen,
+  },
+  {
+    path: "/auth/callback",
+    Component: AuthCallbackScreen,
   },
   {
     path: "/home",

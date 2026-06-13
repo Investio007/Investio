@@ -6,6 +6,7 @@
   "scripts": {
     "build": "vite build",
     "typecheck": "tsc --noEmit",
+    "sync:oauth": "node scripts/sync-oauth-to-supabase.mjs",
     "dev": "vite",
     "dev:server": "node -e \"const p=require('path');const c=require('child_process');const isWin=process.platform==='win32';const py=isWin?p.join('venv','Scripts','python.exe'):p.join('venv','bin','python');const r=c.spawnSync(py,['-m','uvicorn','main:app','--reload','--port','8000'],{cwd:'server',stdio:'inherit',shell:false});process.exit(r.status===null?1:r.status);\"",
     "dev:all": "concurrently \"npm run dev\" \"npm run dev:server\"",
