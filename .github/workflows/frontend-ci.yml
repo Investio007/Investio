@@ -22,6 +22,9 @@ on:
       - "tsconfig.node.json"
       - ".github/workflows/frontend-ci.yml"
 
+permissions:
+  contents: read
+
 jobs:
   frontend:
     runs-on: ubuntu-latest

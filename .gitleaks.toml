@@ -1,0 +1,7 @@
+title = "Investio gitleaks config"
+
+[allowlist]
+description = "Ignore placeholder env templates"
+paths = [
+  '''\.env\.example$''',
+]

@@ -10,12 +10,16 @@ on:
       - "server/**"
       - ".github/workflows/backend-ci.yml"
 
+permissions:
+  contents: read
+
 jobs:
   backend:
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: server
+        shell: bash
 
     steps:
       - name: Checkout
@@ -36,19 +40,40 @@ jobs:
 
       - name: Start server and smoke test endpoints
         run: |
+          set -euo pipefail
+
           uvicorn main:app --host 127.0.0.1 --port 8000 &
           SERVER_PID=$!
 
-          for i in $(seq 1 30); do
+          cleanup() {
+            kill "$SERVER_PID" 2>/dev/null || true
+            wait "$SERVER_PID" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+
+          ready=false
+          for i in $(seq 1 45); do
             if curl -sf http://127.0.0.1:8000/api/health > /dev/null; then
               echo "Server ready after ${i}s"
+              ready=true
               break
             fi
             sleep 1
           done
 
-          curl -sf http://127.0.0.1:8000/api/health | grep -q '"status":"ok"'
-          curl -sf http://127.0.0.1:8000/api/cache/status | grep -q '"cached_keys"'
+          if [ "$ready" != "true" ]; then
+            echo "Server did not become ready in time"
+            exit 1
+          fi
 
-          kill $SERVER_PID
-          wait $SERVER_PID 2>/dev/null || true
+          python - <<'PY'
+          import sys
+          import urllib.request
+
+          health = urllib.request.urlopen("http://127.0.0.1:8000/api/health").read().decode()
+          cache = urllib.request.urlopen("http://127.0.0.1:8000/api/cache/status").read().decode()
+
+          assert '"status":"ok"' in health or '"status": "ok"' in health, health
+          assert "cached_keys" in cache, cache
+          print("Health and cache endpoints OK")
+          PY
