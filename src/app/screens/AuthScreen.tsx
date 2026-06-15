@@ -5,13 +5,18 @@ import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { SocialAuthButtons } from "../components/SocialAuthButtons";
-import { isSupabaseConfigured } from "../../lib/supabase";
+import {
+  clearDemoSession,
+  enableDemoSession,
+  isDevDemoAllowed,
+} from "../lib/auth";
 import {
   signInWithEmail,
   signInWithOAuth,
   signUpWithEmail,
   type OAuthProvider,
 } from "../services/supabaseDb";
+import { isSupabaseConfigured } from "../../lib/supabase";
 
 export function AuthScreen() {
   const [isLogin, setIsLogin] = useState(false);
@@ -83,24 +88,16 @@ export function AuthScreen() {
             return;
           }
         }
-        localStorage.setItem("investio_user", JSON.stringify({ email }));
         navigate("/home");
         return;
       }
 
-      // Offline demo mode when Supabase env vars are missing
-      if (isLogin) {
-        const stored = localStorage.getItem("investio_user");
-        if (!stored) {
-          setError("No account found. Please sign up first.");
-          return;
-        }
-        navigate("/home");
+      if (!isDevDemoAllowed()) {
+        setError("Supabase is required for sign in. Configure .env for production.");
         return;
       }
 
-      localStorage.setItem("investio_user", JSON.stringify({ email }));
-      navigate("/home");
+      setError("Email sign up requires Supabase. Use demo mode in local dev only.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
@@ -219,14 +216,19 @@ export function AuthScreen() {
           </div>
         </form>
 
+        {isDevDemoAllowed() && (
         <Button
           type="button"
           variant="outline"
-          onClick={() => navigate("/home")}
+          onClick={() => {
+            enableDemoSession();
+            navigate("/home");
+          }}
           className="w-full h-12 rounded-2xl border-[#0A1F44]/20 text-[#0A1F44] mt-6"
         >
           Continue in demo mode
         </Button>
+        )}
 
         <div className="mt-8 p-4 bg-[#F5F7FA] rounded-2xl">
           <p className="text-xs text-[#1F2937] text-center leading-relaxed">

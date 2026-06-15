@@ -2,7 +2,7 @@ import type { User } from "@supabase/supabase-js";
 import type { InvestioAsset } from "../data/assets";
 import type { PortfoliosStore } from "../types/portfolio";
 import { migrateLegacyPortfolio } from "../types/portfolio";
-import { isSupabaseConfigured, supabase } from "../../lib/supabase";
+import { getAuthRedirectUrl, isSupabaseConfigured, supabase } from "../../lib/supabase";
 
 export type PortfolioConfig = {
   amount: number;
@@ -149,10 +149,7 @@ export type OAuthProvider = "google" | "apple";
 
 export async function signInWithOAuth(provider: OAuthProvider) {
   const client = requireClient();
-  const redirectTo =
-    typeof window !== "undefined"
-      ? `${window.location.origin}/auth/callback`
-      : undefined;
+  const redirectTo = getAuthRedirectUrl();
 
   return client.auth.signInWithOAuth({
     provider,

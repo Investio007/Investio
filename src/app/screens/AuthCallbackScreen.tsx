@@ -119,7 +119,7 @@ export function AuthCallbackScreen() {
   }, [navigate]);
 
   return (
-    <div className="min-h-screen bg-white flex flex-col items-center justify-center px-8">
+    <div className="min-h-full bg-white flex flex-col items-center justify-center px-8">
       <div className="w-12 h-12 bg-[#0A1F44] rounded-2xl flex items-center justify-center mb-6">
         <TrendingUp className="w-7 h-7 text-white" />
       </div>

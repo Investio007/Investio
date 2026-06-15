@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import type { User } from "@supabase/supabase-js";
+import { clearDemoSession } from "../lib/auth";
 import type { InvestioAsset } from "../data/assets";
 import { isSupabaseConfigured, supabase } from "../../lib/supabase";
 import {
@@ -322,6 +323,7 @@ export function InvestioProvider({ children }: { children: ReactNode }) {
     if (isSupabaseConfigured && supabase) {
       await supabase.auth.signOut();
     }
+    clearDemoSession();
     setUser(null);
     localStorage.removeItem("investio_user");
   };

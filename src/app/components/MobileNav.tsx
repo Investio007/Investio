@@ -1,115 +1,65 @@
 import { useNavigate, useLocation } from "react-router";
 import { Home, BarChart3, GitCompare, MessageSquare } from "lucide-react";
 
+const navItems = [
+  { path: "/home", label: "Home", icon: Home, isActive: (path: string) => path === "/home" },
+  {
+    path: "/portfolio-builder",
+    label: "Portfolio",
+    icon: BarChart3,
+    isActive: (path: string) => path === "/portfolio-builder",
+  },
+  {
+    path: "/compare",
+    label: "Compare",
+    icon: GitCompare,
+    isActive: (path: string) => path === "/compare",
+  },
+  {
+    path: "/advisor",
+    label: "AI Advisor",
+    icon: MessageSquare,
+    isActive: (path: string) =>
+      path === "/ai-assistant" || path === "/advisor",
+  },
+] as const;
+
 export function MobileNav() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const isActive = (path: string) => location.pathname === path;
-  const isAdvisorActive =
-    location.pathname === "/ai-assistant" || location.pathname === "/advisor";
-
   return (
-    <div className="shrink-0 bg-white border-t border-gray-200 px-4 py-3 safe-area-bottom z-40 rounded-b-[2rem]">
-      <div className="flex justify-around items-center">
-        <button
-          onClick={() => navigate("/home")}
-          className="flex flex-col items-center gap-1"
-        >
-          <div
-            className={`w-10 h-10 rounded-2xl flex items-center justify-center ${
-              isActive("/home") ? "bg-[#0A1F44]" : "bg-gray-100"
-            }`}
-          >
-            <Home
-              className={`w-5 h-5 ${
-                isActive("/home") ? "text-white" : "text-gray-600"
-              }`}
-            />
-          </div>
-          <span
-            className={`text-xs font-medium ${
-              isActive("/home") ? "text-[#0A1F44]" : "text-gray-600"
-            }`}
-          >
-            Home
-          </span>
-        </button>
-        <button
-          onClick={() => navigate("/portfolio-builder")}
-          className="flex flex-col items-center gap-1"
-        >
-          <div
-            className={`w-10 h-10 rounded-2xl flex items-center justify-center ${
-              isActive("/portfolio-builder") ? "bg-[#0A1F44]" : "bg-gray-100"
-            }`}
-          >
-            <BarChart3
-              className={`w-5 h-5 ${
-                isActive("/portfolio-builder") ? "text-white" : "text-gray-600"
-              }`}
-            />
-          </div>
-          <span
-            className={`text-xs ${
-              isActive("/portfolio-builder")
-                ? "text-[#0A1F44] font-medium"
-                : "text-gray-600"
-            }`}
-          >
-            Portfolio
-          </span>
-        </button>
-        <button
-          onClick={() => navigate("/compare")}
-          className="flex flex-col items-center gap-1"
-        >
-          <div
-            className={`w-10 h-10 rounded-2xl flex items-center justify-center ${
-              isActive("/compare") ? "bg-[#0A1F44]" : "bg-gray-100"
-            }`}
-          >
-            <GitCompare
-              className={`w-5 h-5 ${
-                isActive("/compare") ? "text-white" : "text-gray-600"
-              }`}
-            />
-          </div>
-          <span
-            className={`text-xs ${
-              isActive("/compare")
-                ? "text-[#0A1F44] font-medium"
-                : "text-gray-600"
-            }`}
-          >
-            Compare
-          </span>
-        </button>
-        <button
-          onClick={() => navigate("/advisor")}
-          className="flex flex-col items-center gap-1"
-        >
-          <div
-            className={`w-10 h-10 rounded-2xl flex items-center justify-center ${
-              isAdvisorActive ? "bg-[#0A1F44]" : "bg-gray-100"
-            }`}
-          >
-            <MessageSquare
-              className={`w-5 h-5 ${
-                isAdvisorActive ? "text-white" : "text-gray-600"
-              }`}
-            />
-          </div>
-          <span
-            className={`text-xs ${
-              isAdvisorActive
-                ? "text-[#0A1F44] font-medium"
-                : "text-gray-600"
-            }`}
-          >
-            AI Advisor
-          </span>
-        </button>
+    <div className="shrink-0 bg-white border-t border-gray-200 px-2 py-2 safe-area-bottom z-40">
+      <div className="flex justify-around items-stretch">
+        {navItems.map(({ path, label, icon: Icon, isActive }) => {
+          const active = isActive(location.pathname);
+          return (
+            <button
+              key={path}
+              type="button"
+              onClick={() => navigate(path)}
+              className="touch-target flex flex-1 flex-col items-center justify-center gap-0.5 py-1"
+              aria-current={active ? "page" : undefined}
+            >
+              <div
+                className={`w-11 h-11 rounded-2xl flex items-center justify-center ${
+                  active ? "bg-[#0A1F44]" : "bg-gray-100"
+                }`}
+              >
+                <Icon
+                  className={`w-5 h-5 ${active ? "text-white" : "text-gray-600"}`}
+                />
+              </div>
+              <span
+                className={`text-xs leading-tight ${
+                  active ? "text-[#0A1F44] font-medium" : "text-gray-600"
+                }`}
+              >
+                {label}
+              </span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );

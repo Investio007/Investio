@@ -141,7 +141,7 @@ export function PortfolioBuilderScreen() {
 
   const renderList = () => (
     <>
-      <div className="bg-white px-6 pt-12 pb-6 rounded-b-3xl shadow-sm mb-6">
+      <div className="bg-white px-6 screen-header pb-6 rounded-b-3xl shadow-sm mb-6">
         <button
           onClick={() => navigate(-1)}
           className="mb-6 w-10 h-10 bg-[#F5F7FA] rounded-2xl flex items-center justify-center"
@@ -209,7 +209,7 @@ export function PortfolioBuilderScreen() {
 
   const renderCreate = () => (
     <>
-      <div className="bg-white px-6 pt-12 pb-6 rounded-b-3xl shadow-sm mb-6">
+      <div className="bg-white px-6 screen-header pb-6 rounded-b-3xl shadow-sm mb-6">
         <button
           onClick={() => setView("list")}
           className="mb-6 w-10 h-10 bg-[#F5F7FA] rounded-2xl flex items-center justify-center"
@@ -339,7 +339,7 @@ export function PortfolioBuilderScreen() {
 
     return (
       <>
-        <div className="bg-white px-6 pt-12 pb-6 rounded-b-3xl shadow-sm mb-6">
+        <div className="bg-white px-6 screen-header pb-6 rounded-b-3xl shadow-sm mb-6">
           <button
             onClick={() => {
               setShowPicker(false);

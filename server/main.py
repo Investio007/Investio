@@ -1,9 +1,12 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 from pydantic import BaseModel, Field
 import yfinance as yf
 import requests as req_lib
 import os
+import re
+from collections import defaultdict
 from dotenv import load_dotenv
 import math
 import time
@@ -86,17 +89,53 @@ Do not use markdown, bullet points, or formatting of any kind."""
 
 app = FastAPI(title="Investio Market Data API")
 
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development").strip().lower()
+ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "").strip()
+AI_RATE_LIMIT = int(os.getenv("AI_RATE_LIMIT", "30"))
+AI_RATE_WINDOW = int(os.getenv("AI_RATE_WINDOW", "60"))
+
+_DEFAULT_CORS_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:4173",
+    "http://127.0.0.1:4173",
+    "capacitor://localhost",
+    "http://localhost",
+    "https://localhost",
+]
+_extra_cors = [
+    origin.strip()
+    for origin in os.getenv("CORS_ORIGINS", "").split(",")
+    if origin.strip()
+]
+CORS_ALLOW_ORIGINS = _DEFAULT_CORS_ORIGINS + _extra_cors
+
+_ai_rate_buckets: dict[str, list[float]] = defaultdict(list)
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = (
+            "camera=(), microphone=(), geolocation=()"
+        )
+        if ENVIRONMENT == "production":
+            response.headers["Strict-Transport-Security"] = (
+                "max-age=31536000; includeSubDomains"
+            )
+        return response
+
+
+app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:4173",
-        "http://127.0.0.1:4173",
-    ],
+    allow_origins=CORS_ALLOW_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 # ─── User-Agent rotation for yfinance fallback ────────────────────────────────
@@ -317,7 +356,42 @@ async def with_retry(
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
 def resolve_ticker(symbol: str) -> str:
-    return SYMBOL_MAP.get(symbol, symbol.upper())
+    key = symbol.lower().strip()
+    if key in SYMBOL_MAP:
+        return SYMBOL_MAP[key]
+    upper = symbol.upper().strip()
+    if re.fullmatch(r"[A-Z0-9.\-^]{1,16}", upper):
+        return upper
+    raise HTTPException(status_code=400, detail="Invalid or unsupported symbol")
+
+
+def client_ip(request: Request) -> str:
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    if request.client:
+        return request.client.host
+    return "unknown"
+
+
+def enforce_rate_limit(request: Request, limit: int = AI_RATE_LIMIT) -> None:
+    ip = client_ip(request)
+    now = time.time()
+    bucket = _ai_rate_buckets[ip]
+    _ai_rate_buckets[ip] = [stamp for stamp in bucket if now - stamp < AI_RATE_WINDOW]
+    if len(_ai_rate_buckets[ip]) >= limit:
+        raise HTTPException(status_code=429, detail="Too many requests. Try again shortly.")
+    _ai_rate_buckets[ip].append(now)
+
+
+def require_admin(request: Request) -> None:
+    if ENVIRONMENT != "production":
+        return
+    if not ADMIN_API_KEY:
+        raise HTTPException(status_code=403, detail="Admin endpoints are disabled")
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header != f"Bearer {ADMIN_API_KEY}":
+        raise HTTPException(status_code=401, detail="Unauthorized")
 
 
 def safe_float(val) -> Optional[float]:
@@ -1091,6 +1165,8 @@ def chat_ollama_sync(message: str) -> ChatResponse:
 
 @app.get("/api/health")
 async def health():
+    if ENVIRONMENT == "production":
+        return {"status": "ok"}
     ollama_base, ollama_key, ollama_model = get_ollama_settings()
     return {
         "status": "ok",
@@ -1110,7 +1186,8 @@ async def health():
 
 
 @app.post("/api/ai/chat", response_model=ChatResponse)
-async def ai_chat(body: ChatRequest):
+async def ai_chat(body: ChatRequest, request: Request):
+    enforce_rate_limit(request)
     message = body.message.strip()
     if not message:
         raise HTTPException(status_code=400, detail="Message cannot be empty")
@@ -1690,7 +1767,8 @@ async def get_insights_legacy():
 
 
 @app.get("/api/cache/status")
-async def cache_status():
+async def cache_status(request: Request):
+    require_admin(request)
     now = time.time()
     status = {}
     for key, entry in _cache.items():
@@ -1703,7 +1781,8 @@ async def cache_status():
 
 
 @app.delete("/api/cache/clear")
-async def cache_clear():
+async def cache_clear(request: Request):
+    require_admin(request)
     count = len(_cache)
     _cache.clear()
     return {"cleared": count}

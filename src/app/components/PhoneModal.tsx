@@ -44,13 +44,13 @@ export function PhoneModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="phone-modal-title"
-        className="relative z-10 w-full max-w-[340px] max-h-[80%] overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl"
+        className="relative z-10 w-full max-w-[min(340px,calc(100%-2rem))] max-h-[min(80dvh,100%)] overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl"
         onClick={(event) => event.stopPropagation()}
       >
         <button
           type="button"
           onClick={() => onOpenChange(false)}
-          className="absolute top-4 right-4 w-8 h-8 rounded-full bg-[#F5F7FA] flex items-center justify-center text-gray-500 hover:text-[#0A1F44]"
+          className="touch-target absolute top-3 right-3 w-10 h-10 rounded-full bg-[#F5F7FA] flex items-center justify-center text-gray-500 hover:text-[#0A1F44]"
           aria-label="Close"
         >
           <X className="w-4 h-4" />

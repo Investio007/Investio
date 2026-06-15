@@ -142,9 +142,9 @@ export function StockAnalysisScreen() {
   const headerRatingScore = sentiment?.aiScore ?? stock.aiScore;
 
   return (
-    <div className="min-h-screen bg-[#F5F7FA] pb-8">
+    <div className="min-h-full bg-[#F5F7FA] pb-8">
       {/* Header */}
-      <div className="bg-white px-6 pt-12 pb-6 rounded-b-3xl shadow-sm mb-6">
+      <div className="bg-white px-6 screen-header pb-6 rounded-b-3xl shadow-sm mb-6">
         <button
           onClick={() => navigate(-1)}
           className="mb-6 w-10 h-10 bg-[#F5F7FA] rounded-2xl flex items-center justify-center"

@@ -116,7 +116,7 @@ export function CompareScreen() {
 
   return (
     <div className="min-h-full bg-[#F5F7FA] pb-8">
-      <div className="bg-white px-6 pt-12 pb-6 rounded-b-3xl shadow-sm mb-6">
+      <div className="bg-white px-6 screen-header pb-6 rounded-b-3xl shadow-sm mb-6">
         <button
           type="button"
           onClick={() => navigate(-1)}

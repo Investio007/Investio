@@ -4,6 +4,11 @@ server/venv/
 
 # Build output
 dist/
+.vite/
+
+# Capacitor native projects (generated via `npx cap add android`)
+android/
+ios/
 
 # Environment & secrets — never commit these
 .env

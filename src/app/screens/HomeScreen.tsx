@@ -9,7 +9,6 @@ import {
   ArrowDown,
   LogOut,
 } from "lucide-react";
-import { supabase } from "../../lib/supabase";
 import { Card } from "../components/ui/card";
 import { useInvestio } from "../context/InvestioContext";
 import { useAddToPortfolioWithPicker } from "../hooks/useAddToPortfolioWithPicker";
@@ -89,7 +88,7 @@ function formatUpdatedAt(iso: string | null): string {
 
 export function HomeScreen() {
   const navigate = useNavigate();
-  const { demoBalance } = useInvestio();
+  const { demoBalance, signOut } = useInvestio();
   const { requestAdd, pickerDialog } = useAddToPortfolioWithPicker();
   const { data: insights, updatedAt, loading: insightsLoading, error: insightsError } = useInsights();
   const [selectedCountryId, setSelectedCountryId] = useState(COUNTRY_MARKETS[0].id);
@@ -139,7 +138,7 @@ export function HomeScreen() {
   return (
     <div className="relative min-h-full bg-[#F5F7FA]">
       {/* Header */}
-      <div className="bg-[#0A1F44] text-white px-6 pt-12 pb-24 rounded-b-[2rem]">
+      <div className="bg-[#0A1F44] text-white px-6 screen-header pb-24 rounded-b-[2rem]">
         <div className="flex justify-between items-center mb-8">
           <div>
             <p className="text-white/80 mb-1">Welcome back</p>
@@ -149,13 +148,10 @@ export function HomeScreen() {
             <button
               type="button"
               onClick={async () => {
-                if (supabase) {
-                  await supabase.auth.signOut();
-                }
-                localStorage.clear();
+                await signOut();
                 navigate("/auth");
               }}
-              className="w-10 h-10 shrink-0 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
+              className="touch-target w-10 h-10 shrink-0 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
               aria-label="Sign out"
             >
               <LogOut className="w-5 h-5" />

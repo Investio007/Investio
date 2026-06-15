@@ -27,5 +27,9 @@ export const supabase: SupabaseClient | null = isSupabaseConfigured
 
 export function getAuthRedirectUrl() {
   if (typeof window === "undefined") return undefined;
+  const configured = (
+    import.meta.env.VITE_AUTH_REDIRECT_URL as string | undefined
+  )?.trim();
+  if (configured) return configured;
   return `${window.location.origin}/auth/callback`;
 }

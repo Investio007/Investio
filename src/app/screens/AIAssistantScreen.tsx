@@ -5,6 +5,7 @@ import { Card } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { Button } from "../components/ui/button";
 import { aiApi } from "../services/aiApi";
+import { useVisualViewportPadding } from "../hooks/useVisualViewportPadding";
 
 interface Message {
   role: "user" | "ai";
@@ -44,6 +45,7 @@ export function AIAssistantScreen() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const keyboardPadding = useVisualViewportPadding();
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -78,7 +80,7 @@ export function AIAssistantScreen() {
   return (
     <div className="h-full min-h-0 flex flex-col bg-[#F5F7FA]">
       {/* Header */}
-      <div className="bg-white px-6 pt-12 pb-6 rounded-b-3xl shadow-sm">
+      <div className="bg-white px-6 screen-header pb-6 rounded-b-3xl shadow-sm">
         <button
           onClick={() => navigate(-1)}
           className="mb-6 w-10 h-10 bg-[#F5F7FA] rounded-2xl flex items-center justify-center"
@@ -182,13 +184,23 @@ export function AIAssistantScreen() {
       </div>
 
       {/* Input */}
-      <div className="shrink-0 bg-white border-t border-gray-200 px-6 py-4">
+      <div
+        className="shrink-0 bg-white border-t border-gray-200 px-6 py-4 safe-area-bottom"
+        style={
+          keyboardPadding > 0
+            ? {
+                paddingBottom: `calc(${keyboardPadding}px + env(safe-area-inset-bottom, 0px))`,
+              }
+            : undefined
+        }
+      >
         <div className="flex gap-3">
           <Input
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSend()}
             placeholder="Ask me anything..."
+            maxLength={2000}
             className="flex-1 h-12 rounded-2xl bg-[#F5F7FA] border-0 text-[#0A1F44] placeholder:text-gray-400"
           />
           <Button
