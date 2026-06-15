@@ -41,7 +41,7 @@ export function OnboardingScreen() {
   const Icon = slide.icon;
 
   return (
-    <div className="min-h-screen bg-white flex flex-col">
+    <div className="h-full min-h-0 bg-white flex flex-col">
       <div className="flex-1 flex flex-col items-center justify-center px-8 py-12">
         <div className="w-full max-w-md flex flex-col items-center">
           {/* Illustration */}

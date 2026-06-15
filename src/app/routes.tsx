@@ -1,4 +1,5 @@
 import { createBrowserRouter, Navigate } from "react-router";
+import { AppShell } from "./components/AppShell";
 import { SplashScreen } from "./screens/SplashScreen";
 import { OnboardingScreen } from "./screens/OnboardingScreen";
 import { AuthScreen } from "./screens/AuthScreen";
@@ -32,8 +33,29 @@ export const router = createBrowserRouter([
     Component: AuthCallbackScreen,
   },
   {
-    path: "/home",
-    Component: HomeScreen,
+    Component: AppShell,
+    children: [
+      {
+        path: "/home",
+        Component: HomeScreen,
+      },
+      {
+        path: "/portfolio-builder",
+        Component: PortfolioBuilderScreen,
+      },
+      {
+        path: "/compare",
+        Component: CompareScreen,
+      },
+      {
+        path: "/ai-assistant",
+        Component: AIAssistantScreen,
+      },
+      {
+        path: "/advisor",
+        Component: AIAssistantScreen,
+      },
+    ],
   },
   {
     path: "/stock/:symbol",
@@ -42,22 +64,6 @@ export const router = createBrowserRouter([
   {
     path: "/analysis",
     Component: StockAnalysisScreen,
-  },
-  {
-    path: "/portfolio-builder",
-    Component: PortfolioBuilderScreen,
-  },
-  {
-    path: "/compare",
-    Component: CompareScreen,
-  },
-  {
-    path: "/ai-assistant",
-    Component: AIAssistantScreen,
-  },
-  {
-    path: "/advisor",
-    Component: AIAssistantScreen,
   },
   {
     path: "/add-demo-funds",

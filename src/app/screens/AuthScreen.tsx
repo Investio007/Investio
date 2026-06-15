@@ -26,7 +26,7 @@ export function AuthScreen() {
     setError("");
 
     if (!isSupabaseConfigured) {
-      setError("Connect Supabase in .env to use Google or Apple sign in.");
+      setError("Connect Supabase in .env to use Google sign in.");
       return;
     }
 
@@ -109,7 +109,7 @@ export function AuthScreen() {
   };
 
   return (
-    <div className="min-h-screen bg-white flex flex-col px-8 py-12">
+    <div className="h-full min-h-0 bg-white flex flex-col px-8 py-12 overflow-y-auto">
       <div className="flex items-center gap-3 mb-12">
         <div className="w-12 h-12 bg-[#0A1F44] rounded-2xl flex items-center justify-center">
           <TrendingUp className="w-7 h-7 text-white" />
@@ -130,8 +130,8 @@ export function AuthScreen() {
         {!isSupabaseConfigured && (
           <p className="text-xs text-[#FFB612] bg-[#FFB612]/10 rounded-xl p-3 mb-4">
             Supabase is not connected yet. Add your project URL and anon key to
-            `.env`, then restart the app. Google and Apple sign in require
-            Supabase — until then, use email or demo mode below.
+            `.env`, then restart the app. Google sign in requires Supabase —
+            until then, use email or demo mode below.
           </p>
         )}
 
@@ -143,9 +143,8 @@ export function AuthScreen() {
 
         <SocialAuthButtons
           disabled={loading}
-          loadingProvider={oauthLoading}
+          loadingProvider={oauthLoading === "google" ? "google" : null}
           onGoogleClick={() => handleOAuth("google")}
-          onAppleClick={() => handleOAuth("apple")}
         />
 
         <div className="relative my-8">
@@ -219,6 +218,15 @@ export function AuthScreen() {
             </button>
           </div>
         </form>
+
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => navigate("/home")}
+          className="w-full h-12 rounded-2xl border-[#0A1F44]/20 text-[#0A1F44] mt-6"
+        >
+          Continue in demo mode
+        </Button>
 
         <div className="mt-8 p-4 bg-[#F5F7FA] rounded-2xl">
           <p className="text-xs text-[#1F2937] text-center leading-relaxed">

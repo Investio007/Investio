@@ -18,6 +18,9 @@ export const supabase: SupabaseClient | null = isSupabaseConfigured
       auth: {
         flowType: "pkce",
         detectSessionInUrl: true,
+        persistSession: true,
+        autoRefreshToken: true,
+        storageKey: "investio-auth",
       },
     })
   : null;

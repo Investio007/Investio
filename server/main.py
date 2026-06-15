@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
 import yfinance as yf
 import requests as req_lib
 import os
@@ -8,8 +9,14 @@ import math
 import time
 import random
 import asyncio
-from datetime import datetime
-from typing import Any, Optional
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Literal, Optional
+
+_SERVER_DIR = Path(__file__).resolve().parent
+_PROJECT_ROOT = _SERVER_DIR.parent
+load_dotenv(_PROJECT_ROOT / ".env", override=True)
+load_dotenv(_SERVER_DIR / ".env", override=True)
 
 # ─── Primary data source: Fincept Terminal (fallback to yfinance) ─────────────
 try:
@@ -23,17 +30,70 @@ except Exception as e:
     FINCEPT_AVAILABLE = False
     print(f"[Investio] Fincept Terminal not available: {e} — falling back to yfinance")
 
-load_dotenv()
+FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY", "").strip()
+FINNHUB_BASE = "https://finnhub.io/api/v1"
+if FINNHUB_API_KEY:
+    print("[Investio] Finnhub API configured — using as primary market data source")
+else:
+    print("[Investio] FINNHUB_API_KEY not set — using yfinance / Alpha Vantage fallbacks")
+
 ALPHA_VANTAGE_KEY = os.getenv("ALPHA_VANTAGE_KEY", "")
 NEWS_API_KEY = os.getenv("NEWS_API_KEY", "")
 AV_BASE = "https://www.alphavantage.co/query"
 NEWS_API_BASE = "https://newsapi.org/v2"
 
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").strip().rstrip("/")
+OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY", "").strip()
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gemma3:4b").strip()
+if OLLAMA_API_KEY and OLLAMA_BASE_URL == "http://localhost:11434":
+    OLLAMA_BASE_URL = "https://ollama.com"
+if OLLAMA_API_KEY or OLLAMA_BASE_URL != "http://localhost:11434":
+    print(f"[Investio] Ollama configured — model={OLLAMA_MODEL}, base={OLLAMA_BASE_URL}")
+else:
+    print("[Investio] OLLAMA_API_KEY not set — AI assistant will use local Ollama if running")
+
+
+def get_ollama_settings() -> tuple[str, str, str]:
+    """Read Ollama settings from .env so updates apply without stale shell env."""
+    file_values: dict[str, str] = {}
+    env_path = _PROJECT_ROOT / ".env"
+    if env_path.is_file():
+        for raw_line in env_path.read_text(encoding="utf-8-sig").splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            file_values[key.strip()] = value.strip()
+
+    base = (
+        file_values.get("OLLAMA_BASE_URL")
+        or os.getenv("OLLAMA_BASE_URL")
+        or "http://localhost:11434"
+    ).strip().rstrip("/")
+    api_key = (file_values.get("OLLAMA_API_KEY") or os.getenv("OLLAMA_API_KEY") or "").strip()
+    model = (file_values.get("OLLAMA_MODEL") or os.getenv("OLLAMA_MODEL") or "gemma3:4b").strip()
+    if api_key and base == "http://localhost:11434":
+        base = "https://ollama.com"
+    return base, api_key, model
+
+AI_SYSTEM_PROMPT = """You are Investio's AI investment advisor for South African users.
+Answer every question in simple, plain English. Maximum 3 sentences.
+Always end your response on a new line with exactly one of these:
+Risk Level: Low
+Risk Level: Moderate
+Risk Level: High
+Do not use markdown, bullet points, or formatting of any kind."""
+
 app = FastAPI(title="Investio Market Data API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:4173"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:4173",
+        "http://127.0.0.1:4173",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -85,6 +145,53 @@ SYMBOL_MAP = {
     "naspers":   "NPN.JO",
     "sasol":     "SOL.JO",
 
+    # China
+    "alibaba":   "BABA",
+    "tencent":   "TCEHY",
+    "baidu":     "BIDU",
+    "jd":        "JD",
+    "nio":       "NIO",
+
+    # Japan
+    "toyota":    "TM",
+    "sony":      "SONY",
+    "nintendo":  "NTDOY",
+
+    # India
+    "infosys":   "INFY",
+    "hdfc":      "HDB",
+    "wipro":     "WIT",
+
+    # United Kingdom
+    "bp":        "BP",
+    "hsbc":      "HSBC",
+    "shell":     "SHEL",
+    "astrazeneca": "AZN",
+
+    # France
+    "total":     "TTE",
+    "sanofi":    "SNY",
+    "loreal":    "LRLCY",
+
+    # Hong Kong
+    "tencent_hk":  "0700.HK",
+    "alibaba_hk":  "9988.HK",
+    "hsbc_hk":     "0005.HK",
+
+    # Canada
+    "shopify":     "SHOP",
+    "royalbank":   "RY",
+    "tdbank":      "TD",
+
+    # Germany
+    "sap":       "SAP",
+    "siemens":   "SIEGY",
+    "mercedes":  "MBGYY",
+
+    # South Korea
+    "skhynix":   "000660.KS",
+    "lg":        "066570.KS",
+
     # Direct uppercase ticker fallbacks
     "AAPL":      "AAPL",
     "MSFT":      "MSFT",
@@ -99,6 +206,10 @@ SYMBOL_MAP = {
     "NFLX":      "NFLX",
 }
 
+# All trackable assets for live top-performer rankings (lowercase / underscore ids only)
+INSIGHT_ASSET_IDS = [key for key in SYMBOL_MAP if key.lower() == key]
+INSIGHT_TOP_N = 20
+
 PERIOD_MAP = {
     "1D": ("1d",  "5m"),
     "1W": ("5d",  "30m"),
@@ -110,6 +221,20 @@ PERIOD_MAP = {
 # Fincept uses BTC (not BTC-USD) in many clients
 FINCEPT_SYMBOL_MAP = {
     "BTC-USD": "BTC",
+}
+
+# Finnhub symbol overrides (exchange-prefixed symbols where needed)
+FINNHUB_SYMBOL_MAP = {
+    "BTC-USD": "BINANCE:BTCUSDT",
+    "BTC": "BINANCE:BTCUSDT",
+}
+
+FINNHUB_PERIOD_MAP = {
+    "1D": ("5", 5 * 86400),
+    "1W": ("60", 8 * 86400),
+    "1M": ("D", 35 * 86400),
+    "6M": ("D", 190 * 86400),
+    "1Y": ("W", 380 * 86400),
 }
 
 # ─── TTL config (seconds) ─────────────────────────────────────────────────────
@@ -124,9 +249,21 @@ TTL = {
 
 # ─── Retry config ─────────────────────────────────────────────────────────────
 
-RETRY_MAX_ATTEMPTS = 4      # up from 3
-RETRY_BASE_DELAY   = 2.0    # up from 1.0 — gives Yahoo more recovery time
+RETRY_MAX_ATTEMPTS = 2
+RETRY_BASE_DELAY   = 1.0
 BATCH_STAGGER_DELAY = 0.5   # seconds between tickers in batch calls
+
+# Skip Alpha Vantage briefly after failures (free tier is slow / often empty)
+_av_disabled_until: float = 0.0
+
+
+def alpha_vantage_enabled() -> bool:
+    return bool(ALPHA_VANTAGE_KEY) and time.time() >= _av_disabled_until
+
+
+def disable_alpha_vantage_temporarily(seconds: int = 600) -> None:
+    global _av_disabled_until
+    _av_disabled_until = time.time() + seconds
 
 # ─── In-memory cache ─────────────────────────────────────────────────────────
 
@@ -206,6 +343,167 @@ def _as_mapping(obj: Any) -> dict:
         return vars(obj)  # type: ignore[arg-type]
     except Exception:
         return {}
+
+
+def _finnhub_symbol(ticker_symbol: str) -> tuple[str, str]:
+    """Return (finnhub_symbol, asset_type) where asset_type is stock|crypto."""
+    mapped = FINNHUB_SYMBOL_MAP.get(ticker_symbol, ticker_symbol)
+    if mapped.startswith("BINANCE:") or mapped.startswith("COINBASE:"):
+        return mapped, "crypto"
+    if ticker_symbol in ("BTC-USD", "BTC"):
+        return "BINANCE:BTCUSDT", "crypto"
+
+    # Yahoo-style suffixes → Finnhub exchange:symbol
+    if mapped.endswith(".KS"):
+        return f"KRX:{mapped[:-3]}", "stock"
+    if mapped.endswith(".JO"):
+        return f"JSE:{mapped[:-3]}", "stock"
+    if mapped.endswith(".HK"):
+        code = mapped[:-3].lstrip("0") or "0"
+        return f"HKEX:{code.zfill(4)}", "stock"
+
+    return mapped, "stock"
+
+
+def finnhub_request(path: str, params: dict) -> dict:
+    if not FINNHUB_API_KEY:
+        raise RuntimeError("FINNHUB_API_KEY not set")
+    response = req_lib.get(
+        f"{FINNHUB_BASE}{path}",
+        params={**params, "token": FINNHUB_API_KEY},
+        timeout=8,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    if isinstance(payload, dict) and payload.get("error"):
+        raise ValueError(str(payload["error"]))
+    return payload
+
+
+def _finnhub_time_label(period: str, ts: int) -> str:
+    dt = datetime.fromtimestamp(ts, tz=timezone.utc)
+    if period == "1D":
+        return dt.strftime("%H:%M")
+    if period in ("1W", "1M"):
+        return dt.strftime("%d %b")
+    return dt.strftime("%b %Y")
+
+
+def fetch_quote_finnhub(ticker_symbol: str) -> dict:
+    sym, asset_type = _finnhub_symbol(ticker_symbol)
+
+    if asset_type == "crypto":
+        now = int(time.time())
+        candles = finnhub_request(
+            "/crypto/candle",
+            {
+                "symbol": sym,
+                "resolution": "D",
+                "from": now - 7 * 86400,
+                "to": now,
+            },
+        )
+        if candles.get("s") != "ok" or not candles.get("c"):
+            raise ValueError(f"Finnhub: no crypto quote for {ticker_symbol}")
+        closes = candles["c"]
+        price = safe_float(closes[-1])
+        prev_close = safe_float(closes[-2]) if len(closes) >= 2 else price
+        change = round(price - prev_close, 2) if price and prev_close else None
+        change_pct = round((change / prev_close) * 100, 2) if change and prev_close else None
+        return {
+            "ticker": ticker_symbol,
+            "name": "Bitcoin",
+            "price": price,
+            "prevClose": prev_close,
+            "change": change,
+            "changePercent": change_pct,
+            "changePositive": (change_pct or 0) >= 0,
+            "high": safe_float(candles["h"][-1]) if candles.get("h") else None,
+            "low": safe_float(candles["l"][-1]) if candles.get("l") else None,
+            "volume": int(candles["v"][-1]) if candles.get("v") else None,
+            "marketCap": None,
+            "currency": "USD",
+        }
+
+    quote = finnhub_request("/quote", {"symbol": sym})
+    price = safe_float(quote.get("c"))
+    if price is None:
+        raise ValueError(f"Finnhub: no quote for {ticker_symbol}")
+
+    prev_close = safe_float(quote.get("pc"))
+    change = safe_float(quote.get("d"))
+    change_pct = safe_float(quote.get("dp"))
+    if change is None and prev_close is not None:
+        change = round(price - prev_close, 2)
+    if change_pct is None and prev_close:
+        change_pct = round((change / prev_close) * 100, 2) if change is not None else None
+
+    name = sym
+    currency = "USD"
+    try:
+        profile = finnhub_request("/stock/profile2", {"symbol": sym})
+        name = profile.get("name") or profile.get("ticker") or sym
+        currency = profile.get("currency") or "USD"
+    except Exception:
+        pass
+
+    return {
+        "ticker": ticker_symbol,
+        "name": name,
+        "price": price,
+        "prevClose": prev_close,
+        "change": change,
+        "changePercent": change_pct,
+        "changePositive": (change_pct or 0) >= 0,
+        "high": safe_float(quote.get("h")),
+        "low": safe_float(quote.get("l")),
+        "volume": None,
+        "marketCap": None,
+        "currency": currency,
+    }
+
+
+def fetch_chart_finnhub(ticker_symbol: str, period: str) -> list[dict]:
+    sym, asset_type = _finnhub_symbol(ticker_symbol)
+    resolution, lookback = FINNHUB_PERIOD_MAP.get(period, ("D", 35 * 86400))
+    now = int(time.time())
+    start = now - lookback
+    path = "/crypto/candle" if asset_type == "crypto" else "/stock/candle"
+
+    candles = finnhub_request(
+        path,
+        {"symbol": sym, "resolution": resolution, "from": start, "to": now},
+    )
+    if candles.get("s") != "ok":
+        raise ValueError(f"Finnhub: no chart for {ticker_symbol}/{period}")
+
+    timestamps = candles.get("t") or []
+    opens = candles.get("o") or []
+    highs = candles.get("h") or []
+    lows = candles.get("l") or []
+    closes = candles.get("c") or []
+    volumes = candles.get("v") or []
+
+    data: list[dict] = []
+    for index, ts in enumerate(timestamps):
+        close = safe_float(closes[index]) if index < len(closes) else None
+        if close is None:
+            continue
+        data.append(
+            {
+                "time": _finnhub_time_label(period, ts),
+                "timestamp": datetime.fromtimestamp(ts, tz=timezone.utc).isoformat(),
+                "open": safe_float(opens[index]) if index < len(opens) else None,
+                "high": safe_float(highs[index]) if index < len(highs) else None,
+                "low": safe_float(lows[index]) if index < len(lows) else None,
+                "close": close,
+                "volume": int(volumes[index]) if index < len(volumes) else 0,
+            }
+        )
+
+    if not data:
+        raise ValueError(f"Finnhub: empty chart for {ticker_symbol}/{period}")
+    return data
 
 
 def fetch_quote_fincept(ticker_symbol: str) -> dict:
@@ -480,7 +778,47 @@ def fetch_chart_alphavantage(ticker_symbol: str, period: str) -> list[dict]:
             }
         )
 
+    if not result:
+        raise ValueError(f"Alpha Vantage: no chart data for {ticker_symbol}")
+
     return result
+
+
+def build_synthetic_chart_from_quote(quote: dict, period: str) -> list[dict]:
+    """Approximate chart from quote when OHLCV providers are rate-limited."""
+    price = safe_float(quote.get("price"))
+    prev_close = safe_float(quote.get("prevClose")) or price
+    if price is None:
+        return []
+
+    labels_by_period = {
+        "1D": ["09:30", "11:00", "13:00", "15:00", "16:00"],
+        "1W": ["Mon", "Tue", "Wed", "Thu", "Fri"],
+        "1M": ["W1", "W2", "W3", "W4"],
+        "6M": ["Jan", "Feb", "Mar", "Apr", "May", "Jun"],
+        "1Y": ["Q1", "Q2", "Q3", "Q4"],
+    }
+    labels = labels_by_period.get(period, ["Start", "Now"])
+    if len(labels) < 2:
+        labels = ["Open", "Now"]
+
+    data: list[dict] = []
+    last_index = len(labels) - 1
+    for index, label in enumerate(labels):
+        progress = index / last_index if last_index else 1.0
+        close = round(prev_close + (price - prev_close) * progress, 2)
+        data.append(
+            {
+                "time": label,
+                "timestamp": datetime.utcnow().isoformat(),
+                "open": close,
+                "high": close,
+                "low": close,
+                "close": close,
+                "volume": 0,
+            }
+        )
+    return data
 
 
 def fetch_quote_yfinance(ticker_symbol: str) -> dict:
@@ -544,8 +882,11 @@ def fetch_quote_yfinance(ticker_symbol: str) -> dict:
 def fetch_chart_yfinance(ticker_symbol: str, period: str) -> list[dict]:
     """
     yfinance chart normalized to Investio list-of-dicts chart shape.
+    Falls back to daily bars when intraday data is unavailable.
     """
     yf_period, yf_interval = PERIOD_MAP.get(period, ("5d", "30m"))
+    session = get_yf_session()
+    df = None
 
     try:
         df = yf.download(
@@ -554,14 +895,31 @@ def fetch_chart_yfinance(ticker_symbol: str, period: str) -> list[dict]:
             interval=yf_interval,
             progress=False,
             auto_adjust=True,
-            session=get_yf_session(),
+            session=session,
         )
     except Exception:
         df = None
 
     if df is None or df.empty:
-        ticker = yf.Ticker(ticker_symbol, session=get_yf_session())
-        df = ticker.history(period=yf_period, interval=yf_interval)
+        try:
+            ticker = yf.Ticker(ticker_symbol, session=session)
+            df = ticker.history(period=yf_period, interval=yf_interval)
+        except Exception:
+            df = None
+
+    # Intraday often rate-limits first — daily bars still work for 1D view.
+    if (df is None or df.empty) and period == "1D":
+        try:
+            df = yf.download(
+                ticker_symbol,
+                period="5d",
+                interval="1d",
+                progress=False,
+                auto_adjust=True,
+                session=session,
+            )
+        except Exception:
+            df = None
 
     if df is None or df.empty:
         raise ValueError(f"No chart data for {ticker_symbol}")
@@ -577,7 +935,7 @@ def fetch_chart_yfinance(ticker_symbol: str, period: str) -> list[dict]:
             continue
 
         if period == "1D":
-            time_label = timestamp.strftime("%H:%M")
+            time_label = timestamp.strftime("%H:%M") if hasattr(timestamp, "strftime") else str(timestamp)[:5]
         elif period in ("1W", "1M"):
             time_label = timestamp.strftime("%d %b")
         else:
@@ -604,59 +962,179 @@ def fetch_chart_yfinance(ticker_symbol: str, period: str) -> list[dict]:
             }
         )
 
+    if not data:
+        raise ValueError(f"No chart data for {ticker_symbol}")
+
     return data
 
 
 def fetch_quote_sync(ticker_symbol: str) -> dict:
     """
-    Fetch quote data. Tries Ticker().info first (has more metadata),
-    falls back to download() for the price if info returns nothing useful.
+    Fetch quote data. Prefer Finnhub when configured; fall back to yfinance / others.
     """
-    if ALPHA_VANTAGE_KEY:
+    if FINNHUB_API_KEY:
+        try:
+            return fetch_quote_finnhub(ticker_symbol)
+        except Exception as fh_err:
+            print(f"[Investio] Finnhub failed for {ticker_symbol}: {fh_err}")
+
+    try:
+        return fetch_quote_yfinance(ticker_symbol)
+    except Exception as yf_err:
+        print(f"[Investio] yfinance failed for {ticker_symbol}: {yf_err}")
+
+    if alpha_vantage_enabled():
         try:
             return fetch_quote_alphavantage(ticker_symbol)
         except Exception as av_err:
-            print(f"[Investio] Alpha Vantage failed for {ticker_symbol}: {av_err} — trying yfinance")
+            print(f"[Investio] Alpha Vantage failed for {ticker_symbol}: {av_err} — disabling AV for 10m")
+            disable_alpha_vantage_temporarily()
 
-    # Keep Fincept as optional primary if it becomes installable later
     if FINCEPT_AVAILABLE:
         try:
             return fetch_quote_fincept(ticker_symbol)
         except Exception as fincept_err:
-            print(f"[Investio] Fincept failed for {ticker_symbol}: {fincept_err} — trying yfinance")
+            print(f"[Investio] Fincept failed for {ticker_symbol}: {fincept_err}")
 
-    return fetch_quote_yfinance(ticker_symbol)
+    raise ValueError(f"No quote data returned for {ticker_symbol}")
 
 
 def fetch_chart_sync(ticker_symbol: str, period: str) -> list[dict]:
     """
-    Fetch OHLCV chart data using yfinance download() directly.
-    download() is less prone to rate limiting than Ticker().history().
+    Fetch OHLCV chart data. Prefer Finnhub when configured; fall back to yfinance / others.
     """
-    if ALPHA_VANTAGE_KEY:
+    if FINNHUB_API_KEY:
+        try:
+            return fetch_chart_finnhub(ticker_symbol, period)
+        except Exception as fh_err:
+            print(f"[Investio] Finnhub chart failed for {ticker_symbol}/{period}: {fh_err}")
+
+    try:
+        return fetch_chart_yfinance(ticker_symbol, period)
+    except Exception as yf_err:
+        print(f"[Investio] yfinance chart failed for {ticker_symbol}/{period}: {yf_err}")
+
+    if alpha_vantage_enabled():
         try:
             return fetch_chart_alphavantage(ticker_symbol, period)
         except Exception as av_err:
-            print(f"[Investio] Alpha Vantage chart failed for {ticker_symbol}/{period}: {av_err} — trying yfinance")
+            print(f"[Investio] Alpha Vantage chart failed for {ticker_symbol}/{period}: {av_err} — disabling AV for 10m")
+            disable_alpha_vantage_temporarily()
 
     if FINCEPT_AVAILABLE:
         try:
             return fetch_chart_fincept(ticker_symbol, period)
         except Exception as fincept_err:
-            print(f"[Investio] Fincept chart failed for {ticker_symbol}/{period}: {fincept_err} — trying yfinance")
+            print(f"[Investio] Fincept chart failed for {ticker_symbol}/{period}: {fincept_err}")
 
-    return fetch_chart_yfinance(ticker_symbol, period)
+    raise ValueError(f"No chart data for {ticker_symbol}")
+
+
+# ─── Ollama AI assistant ───────────────────────────────────────────────────────
+
+class ChatRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=2000)
+
+
+class ChatResponse(BaseModel):
+    text: str
+    risk: Optional[Literal["Low", "Moderate", "High"]] = None
+
+
+def parse_ai_response(full_text: str) -> ChatResponse:
+    lines = [line.strip() for line in full_text.split("\n") if line.strip()]
+    risk_line = next(
+        (line for line in lines if line.lower().startswith("risk level:")),
+        "",
+    )
+    main_text = " ".join(
+        line for line in lines if not line.lower().startswith("risk level:")
+    ).strip()
+    risk_value = risk_line.split(":", 1)[-1].strip() if risk_line else ""
+    risk: Optional[Literal["Low", "Moderate", "High"]] = (
+        risk_value if risk_value in ("Low", "Moderate", "High") else None
+    )
+    return ChatResponse(
+        text=main_text or full_text.strip() or "I couldn't generate a response. Please try again.",
+        risk=risk,
+    )
+
+
+def chat_ollama_sync(message: str) -> ChatResponse:
+    base_url, api_key, model = get_ollama_settings()
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    response = req_lib.post(
+        f"{base_url}/api/chat",
+        headers=headers,
+        json={
+            "model": model,
+            "messages": [
+                {"role": "system", "content": AI_SYSTEM_PROMPT},
+                {"role": "user", "content": message},
+            ],
+            "stream": False,
+        },
+        timeout=60,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    content = (payload.get("message") or {}).get("content", "")
+    if not content:
+        raise ValueError("Ollama returned an empty response")
+    return parse_ai_response(content)
 
 
 # ─── Endpoints ────────────────────────────────────────────────────────────────
 
 @app.get("/api/health")
 async def health():
+    ollama_base, ollama_key, ollama_model = get_ollama_settings()
     return {
         "status": "ok",
         "timestamp": datetime.utcnow().isoformat(),
         "cache_keys": len(_cache),
+        "market_data": {
+            "primary": "finnhub" if FINNHUB_API_KEY else "yfinance",
+            "finnhub": bool(FINNHUB_API_KEY),
+            "alpha_vantage": bool(ALPHA_VANTAGE_KEY),
+        },
+        "ai": {
+            "provider": "ollama",
+            "model": ollama_model,
+            "configured": bool(ollama_key) or ollama_base == "http://localhost:11434",
+        },
     }
+
+
+@app.post("/api/ai/chat", response_model=ChatResponse)
+async def ai_chat(body: ChatRequest):
+    message = body.message.strip()
+    if not message:
+        raise HTTPException(status_code=400, detail="Message cannot be empty")
+
+    try:
+        return await asyncio.wait_for(
+            asyncio.get_event_loop().run_in_executor(
+                None, lambda: chat_ollama_sync(message)
+            ),
+            timeout=65.0,
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=504, detail="AI request timed out. Try again.")
+    except req_lib.HTTPError as exc:
+        status = exc.response.status_code if exc.response is not None else 502
+        detail = "AI service unavailable"
+        if exc.response is not None:
+            try:
+                detail = exc.response.json().get("error", detail)
+            except Exception:
+                detail = exc.response.text[:200] or detail
+        raise HTTPException(status_code=status, detail=detail)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
 
 
 @app.get("/api/quote/{symbol}")
@@ -706,7 +1184,7 @@ async def get_chart(symbol: str, period: str = "1W"):
     ttl = TTL["chart"]
 
     cached, is_fresh = cache_get(cache_key, ttl)
-    if is_fresh:
+    if is_fresh and cached and len(cached) > 0:
         return {
             "symbol": ticker_symbol, "period": period,
             "data": cached, "count": len(cached),
@@ -715,6 +1193,8 @@ async def get_chart(symbol: str, period: str = "1W"):
 
     try:
         data = await with_retry(lambda: fetch_chart_sync(ticker_symbol, period))
+        if not data:
+            raise ValueError(f"No chart data for {ticker_symbol}")
         cache_set(cache_key, data)
         return {
             "symbol": ticker_symbol, "period": period,
@@ -724,12 +1204,28 @@ async def get_chart(symbol: str, period: str = "1W"):
 
     except Exception as exc:
         stale = cache_get_stale(cache_key)
-        if stale:
+        if stale and len(stale) > 0:
             return {
                 "symbol": ticker_symbol, "period": period,
                 "data": stale, "count": len(stale),
                 "stale": True, "source": "stale_cache",
             }
+
+        try:
+            quote = await with_retry(lambda: fetch_quote_sync(ticker_symbol))
+            synthetic = build_synthetic_chart_from_quote(quote, period)
+            if synthetic:
+                return {
+                    "symbol": ticker_symbol,
+                    "period": period,
+                    "data": synthetic,
+                    "count": len(synthetic),
+                    "stale": True,
+                    "source": "synthetic",
+                }
+        except Exception:
+            pass
+
         return {
             "symbol": ticker_symbol,
             "period": period,
@@ -740,75 +1236,398 @@ async def get_chart(symbol: str, period: str = "1W"):
         }
 
 
+@app.get("/api/snapshot/{symbol}/{period}")
+async def get_snapshot(symbol: str, period: str = "1W"):
+    """
+    Fast combined quote + chart for the home screen.
+    Returns a synthetic chart immediately when live OHLCV is slow or unavailable.
+    """
+    ticker_symbol = resolve_ticker(symbol)
+    quote_cache_key = f"quote:{ticker_symbol}"
+    chart_cache_key = f"chart:{ticker_symbol}:{period}"
+
+    quote_payload: dict
+    cached_quote, quote_fresh = cache_get(quote_cache_key, TTL["quote"])
+    if quote_fresh and cached_quote:
+        quote_payload = {**cached_quote, "id": symbol, "stale": False, "source": "cache"}
+    else:
+        try:
+            live_quote = await with_retry(
+                lambda: fetch_quote_sync(ticker_symbol),
+                max_attempts=1,
+                timeout=3.0,
+            )
+            cache_set(quote_cache_key, live_quote)
+            quote_payload = {**live_quote, "id": symbol, "stale": False, "source": "live"}
+        except Exception:
+            stale_quote = cache_get_stale(quote_cache_key)
+            if stale_quote:
+                quote_payload = {**stale_quote, "id": symbol, "stale": True, "source": "stale_cache"}
+            else:
+                quote_payload = {
+                    "ticker": ticker_symbol,
+                    "name": ticker_symbol,
+                    "price": None,
+                    "prevClose": None,
+                    "change": None,
+                    "changePercent": None,
+                    "changePositive": True,
+                    "high": None,
+                    "low": None,
+                    "volume": None,
+                    "marketCap": None,
+                    "currency": "USD",
+                    "id": symbol,
+                    "stale": True,
+                    "source": "unavailable",
+                }
+
+    chart_data: list[dict] = []
+    chart_source = "synthetic"
+
+    cached_chart, chart_fresh = cache_get(chart_cache_key, TTL["chart"])
+    if chart_fresh and cached_chart and len(cached_chart) > 0:
+        chart_data = cached_chart
+        chart_source = "cache"
+    elif FINNHUB_API_KEY:
+        try:
+            live_chart = await with_retry(
+                lambda: fetch_chart_sync(ticker_symbol, period),
+                max_attempts=1,
+                timeout=5.0,
+            )
+            if live_chart:
+                chart_data = live_chart
+                chart_source = "live"
+                cache_set(chart_cache_key, live_chart)
+        except Exception:
+            pass
+
+    if not chart_data and quote_payload.get("price") is not None:
+        chart_data = build_synthetic_chart_from_quote(quote_payload, period)
+        chart_source = "synthetic"
+
+    return {
+        "quote": quote_payload,
+        "chart": {
+            "symbol": ticker_symbol,
+            "period": period,
+            "data": chart_data,
+            "count": len(chart_data),
+        },
+        "chartSource": chart_source,
+    }
+
+
+COMPARE_ASSET_IDS = [
+    "apple",
+    "microsoft",
+    "alphabet",
+    "nvidia",
+    "amazon",
+    "meta",
+    "tesla",
+    "netflix",
+]
+
+COMPARE_BADGE_LABELS = {
+    "growth": "Best growth",
+    "profitability": "Most profitable",
+    "stability": "Most stable",
+}
+
+
+def long_term_score_from_analysis(analysis: dict) -> int:
+    """Weight stability and profits higher — better for long-term holders."""
+    return round(
+        analysis["growth"]["pct"] * 0.25
+        + analysis["profitability"]["pct"] * 0.30
+        + analysis["stability"]["pct"] * 0.35
+        + analysis["competition"]["pct"] * 0.10
+    )
+
+
+def build_compare_verdict(companies: list[dict]) -> dict:
+    ranked = sorted(
+        companies,
+        key=lambda row: row.get("longTermScore", 0),
+        reverse=True,
+    )
+    winner = ranked[0]
+    runner = ranked[1] if len(ranked) > 1 else None
+    winner_name = winner.get("name", "This company")
+    analysis = winner.get("analysis", {})
+
+    strengths: list[str] = []
+    if analysis.get("stability", {}).get("pct", 0) >= 65:
+        strengths.append("steady price history")
+    if analysis.get("profitability", {}).get("pct", 0) >= 65:
+        strengths.append("strong profits")
+    if analysis.get("growth", {}).get("pct", 0) >= 65:
+        strengths.append("healthy growth")
+
+    strength_text = (
+        ", ".join(strengths)
+        if strengths
+        else "a balanced mix of growth, profit, and safety"
+    )
+
+    summary = (
+        f"Based on live market prices and company health scores, {winner_name} "
+        f"scores highest for holding 5+ years. It stands out for {strength_text}."
+    )
+
+    if runner:
+        gap = winner.get("longTermScore", 0) - runner.get("longTermScore", 0)
+        runner_name = runner.get("name", "the runner-up")
+        if gap >= 8:
+            summary += (
+                f" It leads {runner_name} by a clear margin — a safer long-term pick right now."
+            )
+        else:
+            summary += (
+                f" It's close with {runner_name}. Both are solid, but {winner_name} edges ahead overall."
+            )
+
+    return {
+        "winnerId": winner.get("id"),
+        "headline": f"{winner_name} is the best long-term pick here",
+        "summary": summary,
+        "tips": [
+            "Think in years, not days — short dips are normal.",
+            "Don't put all your money in one company; spread across 2–3 strong picks.",
+            "Scores refresh with live data — check back monthly.",
+        ],
+    }
+
+
+def build_compare_badges(companies: list[dict]) -> dict[str, str]:
+    badges: dict[str, str] = {}
+    for key in ("growth", "profitability", "stability"):
+        best = max(
+            companies,
+            key=lambda row: row.get("analysis", {}).get(key, {}).get("pct", 0),
+        )
+        badges[key] = best.get("id", "")
+    return badges
+
+
+async def fetch_compare_quote(asset_id: str) -> dict:
+    ticker_symbol = resolve_ticker(asset_id)
+    item_key = f"quote:{ticker_symbol}"
+    ttl = TTL["quote"]
+
+    item_cached, item_fresh = cache_get(item_key, ttl)
+    if item_fresh and item_cached:
+        return item_cached
+
+    try:
+        data = await with_retry(
+            lambda ts=ticker_symbol: fetch_quote_sync(ts),
+            max_attempts=2,
+            timeout=8.0,
+        )
+        cache_set(item_key, data)
+        return data
+    except Exception:
+        return cache_get_stale(item_key) or {}
+
+
+async def build_compare_company(asset_id: str) -> dict:
+    ticker_symbol = resolve_ticker(asset_id)
+    quote_data = await fetch_compare_quote(asset_id)
+    company_name = quote_data.get("name") or asset_id.replace("_", " ").title()
+
+    sentiment = build_sentiment_sync(asset_id, ticker_symbol, company_name)
+    analysis = sentiment["analysis"]
+    long_term_score = long_term_score_from_analysis(analysis)
+
+    change_pct = quote_data.get("changePercent")
+    return {
+        "id": asset_id,
+        "ticker": ticker_symbol,
+        "name": company_name,
+        "price": quote_data.get("price"),
+        "change": quote_data.get("change"),
+        "changePercent": change_pct,
+        "changePositive": quote_data.get(
+            "changePositive",
+            (change_pct or 0) >= 0,
+        ),
+        "currency": quote_data.get("currency") or "USD",
+        "aiScore": sentiment["aiScore"],
+        "rating": sentiment["rating"],
+        "explanation": sentiment["explanation"],
+        "analysis": analysis,
+        "longTermScore": long_term_score,
+        "isWinner": False,
+    }
+
+
 @app.get("/api/compare")
 async def get_compare():
-    cache_key = "compare:all"
+    cache_key = "compare:full"
     ttl = TTL["compare"]
 
     cached, is_fresh = cache_get(cache_key, ttl)
-    if is_fresh:
-        return {"companies": cached, "stale": False, "source": "cache"}
+    if (
+        is_fresh
+        and isinstance(cached, dict)
+        and cached.get("companies")
+        and cached.get("compareVersion") == 2
+        and cached.get("verdict")
+    ):
+        return {**cached, "stale": False, "source": "cache"}
 
-    compare_ids = ["apple", "microsoft", "alphabet"]
-    results = []
+    companies: list[dict] = []
+    semaphore = asyncio.Semaphore(3)
 
-    for i, asset_id in enumerate(compare_ids):
-        # FIX 1: stagger batch calls to avoid burst rate limiting
-        if i > 0:
-            await asyncio.sleep(BATCH_STAGGER_DELAY)
+    async def fetch_one(asset_id: str) -> dict:
+        async with semaphore:
+            return await build_compare_company(asset_id)
 
-        ticker_symbol = resolve_ticker(asset_id)
-        item_key = f"quote:{ticker_symbol}"
+    companies = list(
+        await asyncio.gather(*(fetch_one(asset_id) for asset_id in COMPARE_ASSET_IDS))
+    )
 
-        item_cached, item_fresh = cache_get(item_key, ttl)
-        if item_fresh:
-            results.append({
-                "id": asset_id, "ticker": ticker_symbol,
-                "name": item_cached.get("name", ticker_symbol),
-                "price": item_cached.get("price"),
-                "change": item_cached.get("change"),
-                "changePercent": item_cached.get("changePercent"),
-                "changePositive": item_cached.get("changePositive", True),
-            })
-            continue
+    verdict = build_compare_verdict(companies)
+    badges = build_compare_badges(companies)
+    winner_id = verdict.get("winnerId")
 
+    for company in companies:
+        company["isWinner"] = company.get("id") == winner_id
+        company["badges"] = [
+            COMPARE_BADGE_LABELS[key]
+            for key, asset_id in badges.items()
+            if asset_id == company.get("id")
+        ]
+
+    payload = {
+        "companies": companies,
+        "verdict": verdict,
+        "badges": badges,
+        "updatedAt": datetime.utcnow().isoformat(),
+        "stale": any(row.get("price") is None for row in companies),
+        "source": "live",
+        "compareVersion": 2,
+    }
+    cache_set(cache_key, payload)
+    return payload
+
+
+def apply_ai_insight(item: dict, rank: int) -> dict:
+    """Derive AI score and short prediction from live price momentum."""
+    change = float(item.get("changePercent") or 0)
+    score = round(min(98, max(38, 52 + change * 5 + max(0, 21 - rank) * 1.5)))
+
+    if rank <= 3 and change >= 2:
+        prediction = f"AI #{rank} pick — strongest live momentum, likely to lead today"
+        rating = "Strong Buy"
+        rating_color = "green"
+    elif change >= 1.5:
+        prediction = "AI sees continued upside from today's live market strength"
+        rating = "Buy"
+        rating_color = "green"
+    elif change >= 0.5:
+        prediction = "AI flags steady gains — good short-term hold candidate"
+        rating = "Hold"
+        rating_color = "gold"
+    elif change >= 0:
+        prediction = "AI notes modest gains — watch for breakout confirmation"
+        rating = "Hold"
+        rating_color = "gold"
+    else:
+        prediction = "AI ranks lower today — weaker live session vs peers"
+        rating = "Caution"
+        rating_color = "red"
+
+    return {
+        **item,
+        "rank": rank,
+        "aiScore": score,
+        "aiPrediction": prediction,
+        "rating": rating,
+        "ratingColor": rating_color,
+    }
+
+
+async def fetch_insight_item(asset_id: str) -> Optional[dict]:
+    ticker_symbol = resolve_ticker(asset_id)
+    item_key = f"quote:{ticker_symbol}"
+    ttl = TTL["quote"]
+
+    item_cached, item_fresh = cache_get(item_key, ttl)
+    if item_fresh and item_cached:
+        data = item_cached
+    else:
         try:
-            data = await with_retry(lambda ts=ticker_symbol: fetch_quote_sync(ts))
+            data = await with_retry(
+                lambda ts=ticker_symbol: fetch_quote_sync(ts),
+                max_attempts=1,
+                timeout=6.0,
+            )
             cache_set(item_key, data)
-            results.append({
-                "id": asset_id, "ticker": ticker_symbol,
-                "name": data.get("name", ticker_symbol),
-                "price": data.get("price"),
-                "change": data.get("change"),
-                "changePercent": data.get("changePercent"),
-                "changePositive": data.get("changePositive", True),
-            })
         except Exception:
-            stale_item = cache_get_stale(item_key)
-            if stale_item:
-                results.append({
-                    "id": asset_id, "ticker": ticker_symbol,
-                    "name": stale_item.get("name", ticker_symbol),
-                    "price": stale_item.get("price"),
-                    "change": stale_item.get("change"),
-                    "changePercent": stale_item.get("changePercent"),
-                    "changePositive": stale_item.get("changePositive", True),
-                })
-            else:
-                results.append({
-                    "id": asset_id, "ticker": ticker_symbol,
-                    "name": ticker_symbol,
-                    "price": None, "change": None,
-                    "changePercent": None, "changePositive": True,
-                })
+            data = cache_get_stale(item_key) or {}
 
-    cache_set(cache_key, results)
-    stale_any = any(r["price"] is None for r in results)
-    return {"companies": results, "stale": stale_any, "source": "live"}
+    change_pct = data.get("changePercent")
+    if change_pct is None or data.get("price") is None:
+        return None
+
+    return {
+        "id": asset_id,
+        "ticker": ticker_symbol,
+        "name": data.get("name") or asset_id.replace("_", " ").title(),
+        "price": data.get("price"),
+        "change": data.get("change"),
+        "changePercent": change_pct,
+        "changePositive": data.get("changePositive", change_pct >= 0),
+        "currency": data.get("currency") or "USD",
+    }
+
+
+async def build_live_top_insights() -> dict:
+    semaphore = asyncio.Semaphore(8)
+
+    async def fetch_limited(asset_id: str) -> Optional[dict]:
+        async with semaphore:
+            return await fetch_insight_item(asset_id)
+
+    raw = await asyncio.gather(*(fetch_limited(asset_id) for asset_id in INSIGHT_ASSET_IDS))
+    ranked = sorted(
+        [item for item in raw if item is not None],
+        key=lambda row: float(row["changePercent"]),
+        reverse=True,
+    )[:INSIGHT_TOP_N]
+
+    top = [apply_ai_insight(item, index + 1) for index, item in enumerate(ranked)]
+    stale_any = len(top) < INSIGHT_TOP_N
+
+    return {
+        "assets": top,
+        "count": len(top),
+        "updatedAt": datetime.utcnow().isoformat(),
+        "stale": stale_any,
+        "source": "live",
+    }
 
 
 @app.get("/api/insights")
 async def get_insights():
+    cache_key = "insights:top20"
+    ttl = TTL["insights"]
+
+    cached, is_fresh = cache_get(cache_key, ttl)
+    if is_fresh and cached:
+        return {**cached, "stale": cached.get("stale", False), "source": "cache"}
+
+    payload = await build_live_top_insights()
+    cache_set(cache_key, payload)
+    return payload
+
+
+@app.get("/api/insights/legacy")
+async def get_insights_legacy():
     cache_key = "insights:all"
     ttl = TTL["insights"]
 

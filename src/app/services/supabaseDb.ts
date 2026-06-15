@@ -1,5 +1,7 @@
 import type { User } from "@supabase/supabase-js";
 import type { InvestioAsset } from "../data/assets";
+import type { PortfoliosStore } from "../types/portfolio";
+import { migrateLegacyPortfolio } from "../types/portfolio";
 import { isSupabaseConfigured, supabase } from "../../lib/supabase";
 
 export type PortfolioConfig = {
@@ -15,13 +17,41 @@ export type PortfolioConfig = {
 
 export type UserAppData = {
   demoBalance: number;
-  portfolio: InvestioAsset[];
-  portfolioConfig: PortfolioConfig;
+  portfoliosStore: PortfoliosStore;
 };
+
+function parsePortfoliosStore(raw: unknown, fallbackHoldings: InvestioAsset[]): PortfoliosStore {
+  if (raw && typeof raw === "object" && "version" in raw && (raw as PortfoliosStore).version === 2) {
+    const store = raw as PortfoliosStore;
+    return {
+      version: 2,
+      activePortfolioId: store.activePortfolioId,
+      portfolios: Array.isArray(store.portfolios) ? store.portfolios : [],
+    };
+  }
+
+  const legacyConfig =
+    raw && typeof raw === "object" && !("version" in raw)
+      ? (raw as PortfolioConfig)
+      : null;
+
+  return migrateLegacyPortfolio(fallbackHoldings, legacyConfig);
+}
+
+function flattenHoldings(store: PortfoliosStore): InvestioAsset[] {
+  return store.portfolios.flatMap((portfolio) =>
+    portfolio.holdings.map((asset) => ({
+      ...asset,
+      _portfolioId: portfolio.id,
+    })),
+  );
+}
 
 function requireClient() {
   if (!supabase || !isSupabaseConfigured) {
-    throw new Error("Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to .env");
+    throw new Error(
+      "Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to .env",
+    );
   }
   return supabase;
 }
@@ -51,28 +81,26 @@ export async function loadUserAppData(user: User): Promise<UserAppData | null> {
     return null;
   }
 
-  const portfolio = (items ?? [])
+  const fallbackHoldings = (items ?? [])
     .map((row) => row.asset_data as InvestioAsset)
     .filter(Boolean);
 
+  const portfoliosStore = parsePortfoliosStore(profile?.portfolio_config, fallbackHoldings);
+
   return {
     demoBalance: Number(profile?.demo_balance ?? 25000),
-    portfolio,
-    portfolioConfig: (profile?.portfolio_config as PortfolioConfig) ?? null,
+    portfoliosStore,
   };
 }
 
-export async function saveUserAppData(
-  user: User,
-  data: UserAppData,
-): Promise<void> {
+export async function saveUserAppData(user: User, data: UserAppData): Promise<void> {
   const client = requireClient();
 
   const { error: profileError } = await client.from("profiles").upsert({
     id: user.id,
     email: user.email,
     demo_balance: data.demoBalance,
-    portfolio_config: data.portfolioConfig,
+    portfolio_config: data.portfoliosStore,
     updated_at: new Date().toISOString(),
   });
 
@@ -89,12 +117,13 @@ export async function saveUserAppData(
     throw new Error(deleteError.message);
   }
 
-  if (data.portfolio.length === 0) {
+  const flat = flattenHoldings(data.portfoliosStore);
+  if (flat.length === 0) {
     return;
   }
 
   const { error: insertError } = await client.from("portfolio_items").insert(
-    data.portfolio.map((asset) => ({
+    flat.map((asset) => ({
       user_id: user.id,
       asset_id: asset.id,
       asset_data: asset,

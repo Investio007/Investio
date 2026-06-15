@@ -10,8 +10,8 @@ export function MobileNav() {
     location.pathname === "/ai-assistant" || location.pathname === "/advisor";
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-6 py-4 safe-area-bottom z-40">
-      <div className="flex justify-around items-center max-w-md mx-auto">
+    <div className="shrink-0 bg-white border-t border-gray-200 px-4 py-3 safe-area-bottom z-40 rounded-b-[2rem]">
+      <div className="flex justify-around items-center">
         <button
           onClick={() => navigate("/home")}
           className="flex flex-col items-center gap-1"

@@ -6,6 +6,8 @@
  * Optional provider secrets: GOOGLE_*, GITHUB_OAUTH_*, APPLE_*
  */
 
+import { generateAppleClientSecret } from "./generate-apple-client-secret.mjs";
+
 const SUPABASE_ACCESS_TOKEN = process.env.SUPABASE_ACCESS_TOKEN?.trim();
 const PROJECT_REF =
   process.env.SUPABASE_PROJECT_REF?.trim() ||
@@ -77,17 +79,57 @@ configureProvider(
   "GITHUB_OAUTH",
 );
 
-configureProvider(
-  "external_apple_enabled",
-  "external_apple_client_id",
-  "external_apple_secret",
-  "APPLE",
-);
+function configureApple() {
+  const clientId = process.env.APPLE_CLIENT_ID?.trim();
+  let secret = process.env.APPLE_CLIENT_SECRET?.trim();
+
+  const teamId = process.env.APPLE_TEAM_ID?.trim();
+  const keyId = process.env.APPLE_KEY_ID?.trim();
+  const privateKey =
+    process.env.APPLE_PRIVATE_KEY?.trim() ||
+    process.env.APPLE_PRIVATE_KEY_BASE64?.trim();
+
+  if (clientId && !secret && teamId && keyId && privateKey) {
+    try {
+      const generated = generateAppleClientSecret({
+        teamId,
+        keyId,
+        clientId,
+        privateKey,
+      });
+      secret = generated.secret;
+      console.log(
+        `✓ APPLE client secret generated from signing key (expires ${generated.expiresAt})`,
+      );
+    } catch (error) {
+      console.error(
+        "✗ APPLE secret generation failed:",
+        error instanceof Error ? error.message : error,
+      );
+      return false;
+    }
+  }
+
+  if (clientId && secret) {
+    payload.external_apple_enabled = true;
+    payload.external_apple_client_id = clientId;
+    payload.external_apple_secret = secret;
+    console.log("✓ APPLE credentials found — will enable");
+    return true;
+  }
+
+  console.log(
+    "○ APPLE skipped (set APPLE_CLIENT_ID + APPLE_CLIENT_SECRET, or APPLE_TEAM_ID/KEY_ID/PRIVATE_KEY)",
+  );
+  return false;
+}
+
+const appleEnabled = configureApple();
 
 const enabledCount = [
   googleEnabled,
   payload.external_github_enabled,
-  payload.external_apple_enabled,
+  appleEnabled,
 ].filter(Boolean).length;
 
 if (enabledCount === 0) {

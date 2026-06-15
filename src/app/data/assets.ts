@@ -171,4 +171,119 @@ export const companies: InvestioAsset[] = [
     chartPath:
       "M0 35 C40 40 80 30 120 38 C160 45 200 35 240 42 C270 48 300 40 320 45",
   },
+  {
+    id: "nvidia",
+    name: "NVIDIA",
+    ticker: "NVDA",
+    price: "$875.00",
+    priceRaw: 875,
+    change: "+2.1%",
+    changePositive: true,
+    aiScore: 88,
+    ratingColor: "green",
+    description:
+      "NVIDIA makes chips that power AI. It is growing very fast but the price can move a lot.",
+    analysis: {
+      growth: { label: "Strong", color: "green", pct: 95 },
+      profitability: { label: "Strong", color: "green", pct: 90 },
+      stability: { label: "Moderate", color: "gold", pct: 55 },
+      competition: { label: "Moderate", color: "gold", pct: 58 },
+    },
+    explanation:
+      "NVIDIA leads the AI chip market. Huge growth potential, but expect bigger price swings than older tech giants.",
+    chartPath:
+      "M0 50 C40 45 80 35 120 30 C160 25 200 20 240 15 C280 10 300 8 320 5",
+  },
+  {
+    id: "amazon",
+    name: "Amazon",
+    ticker: "AMZN",
+    price: "$185.00",
+    priceRaw: 185,
+    change: "+0.6%",
+    changePositive: true,
+    aiScore: 84,
+    ratingColor: "green",
+    description:
+      "Amazon sells online and runs cloud services. A huge company with steady long-term growth.",
+    analysis: {
+      growth: { label: "Strong", color: "green", pct: 82 },
+      profitability: { label: "Moderate", color: "gold", pct: 58 },
+      stability: { label: "Strong", color: "green", pct: 78 },
+      competition: { label: "Moderate", color: "gold", pct: 52 },
+    },
+    explanation:
+      "Amazon dominates online shopping and AWS cloud computing. Profits are growing as the business matures.",
+    chartPath:
+      "M0 42 C50 40 100 38 150 35 C200 32 250 28 320 22",
+  },
+  {
+    id: "meta",
+    name: "Meta",
+    ticker: "META",
+    price: "$505.00",
+    priceRaw: 505,
+    change: "+1.0%",
+    changePositive: true,
+    aiScore: 82,
+    ratingColor: "green",
+    description:
+      "Meta owns Facebook, Instagram, and WhatsApp. Strong ad business with AI investments ahead.",
+    analysis: {
+      growth: { label: "Strong", color: "green", pct: 80 },
+      profitability: { label: "Strong", color: "green", pct: 85 },
+      stability: { label: "Moderate", color: "gold", pct: 68 },
+      competition: { label: "Moderate", color: "gold", pct: 50 },
+    },
+    explanation:
+      "Meta earns from ads across social apps used by billions. Investing heavily in AI and the metaverse.",
+    chartPath:
+      "M0 38 C40 42 80 36 120 40 C160 44 200 38 240 42 C280 46 300 40 320 38",
+  },
+  {
+    id: "tesla",
+    name: "Tesla",
+    ticker: "TSLA",
+    price: "$245.00",
+    priceRaw: 245,
+    change: "-1.2%",
+    changePositive: false,
+    aiScore: 68,
+    ratingColor: "gold",
+    description:
+      "Tesla makes electric cars and energy products. High growth but the stock price moves sharply.",
+    analysis: {
+      growth: { label: "Strong", color: "green", pct: 88 },
+      profitability: { label: "Moderate", color: "gold", pct: 55 },
+      stability: { label: "Risky", color: "red", pct: 38 },
+      competition: { label: "Moderate", color: "gold", pct: 48 },
+    },
+    explanation:
+      "Tesla is a leader in electric vehicles. Exciting growth story, but expect more ups and downs than stable giants.",
+    chartPath:
+      "M0 30 C30 50 60 25 90 55 C120 35 180 20 240 45 C280 30 300 50 320 25",
+  },
+  {
+    id: "netflix",
+    name: "Netflix",
+    ticker: "NFLX",
+    price: "$620.00",
+    priceRaw: 620,
+    change: "+0.4%",
+    changePositive: true,
+    aiScore: 76,
+    ratingColor: "gold",
+    description:
+      "Netflix is the top streaming service worldwide. Growing subscribers with a strong brand.",
+    analysis: {
+      growth: { label: "Strong", color: "green", pct: 75 },
+      profitability: { label: "Moderate", color: "gold", pct: 62 },
+      stability: { label: "Moderate", color: "gold", pct: 60 },
+      competition: { label: "High", color: "red", pct: 40 },
+    },
+    explanation:
+      "Netflix leads streaming entertainment globally. Competition is fierce, but the brand and content library are strong.",
+    chartPath:
+      "M0 40 C50 38 100 42 150 36 C200 32 250 38 320 30",
+  },
 ];
