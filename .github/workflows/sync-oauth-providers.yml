@@ -38,6 +38,10 @@ jobs:
           GITHUB_OAUTH_CLIENT_SECRET: ${{ secrets.GITHUB_OAUTH_CLIENT_SECRET }}
           APPLE_CLIENT_ID: ${{ secrets.APPLE_CLIENT_ID }}
           APPLE_CLIENT_SECRET: ${{ secrets.APPLE_CLIENT_SECRET }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_KEY_ID: ${{ secrets.APPLE_KEY_ID }}
+          APPLE_PRIVATE_KEY: ${{ secrets.APPLE_PRIVATE_KEY }}
+          APPLE_PRIVATE_KEY_BASE64: ${{ secrets.APPLE_PRIVATE_KEY_BASE64 }}
         run: node scripts/sync-oauth-to-supabase.mjs
 
       - name: Summary
@@ -50,3 +54,5 @@ jobs:
           echo "\`https://${REF}.supabase.co/auth/v1/callback\`" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "Then test sign in at \`http://localhost:5173/auth\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Apple:** re-run this workflow every ~6 months (or when sign-in breaks) so a fresh client secret JWT is generated from your .p8 key." >> "$GITHUB_STEP_SUMMARY"

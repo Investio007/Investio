@@ -1,10 +1,12 @@
 import { Button } from "./ui/button";
 
+// Re-enable when Apple Developer Program is configured.
+const APPLE_SIGN_IN_ENABLED = false;
+
 type SocialAuthButtonsProps = {
   disabled?: boolean;
-  loadingProvider?: "google" | "apple" | null;
+  loadingProvider?: "google" | null;
   onGoogleClick: () => void;
-  onAppleClick: () => void;
 };
 
 function GoogleIcon() {
@@ -42,7 +44,6 @@ export function SocialAuthButtons({
   disabled = false,
   loadingProvider = null,
   onGoogleClick,
-  onAppleClick,
 }: SocialAuthButtonsProps) {
   const isBusy = disabled || loadingProvider !== null;
 
@@ -59,15 +60,16 @@ export function SocialAuthButtons({
         {loadingProvider === "google" ? "Connecting..." : "Continue with Google"}
       </Button>
 
-      <Button
-        type="button"
-        disabled={isBusy}
-        onClick={onAppleClick}
-        className="w-full h-14 rounded-2xl bg-black hover:bg-black/90 text-white text-base font-medium"
-      >
-        <AppleIcon />
-        {loadingProvider === "apple" ? "Connecting..." : "Continue with Apple"}
-      </Button>
+      {APPLE_SIGN_IN_ENABLED && (
+        <Button
+          type="button"
+          disabled={isBusy}
+          className="w-full h-14 rounded-2xl bg-black hover:bg-black/90 text-white text-base font-medium"
+        >
+          <AppleIcon />
+          Continue with Apple
+        </Button>
+      )}
     </div>
   );
 }

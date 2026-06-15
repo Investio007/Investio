@@ -1,4 +1,3 @@
-import { useState } from "react";
 import {
   Line,
   LineChart,
@@ -7,21 +6,17 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { useChart } from "../hooks/useMarketData";
-import type { Period } from "../services/marketApi";
+import type { ChartPoint, Period } from "../services/marketApi";
 
-interface PriceChartProps {
-  symbol: string;
-  initialPeriod?: Period;
-  showPeriodSelector?: boolean;
+type PriceChartProps = {
+  points: ChartPoint[];
+  period: Period;
   height?: number;
   color?: string;
   compact?: boolean;
-  fallbackData?: Array<{ time: string; close: number }>;
-  fallbackDataByPeriod?: Partial<Record<Period, Array<{ time: string; close: number }>>>;
-}
-
-const PERIODS: Period[] = ["1D", "1W", "1M", "6M", "1Y"];
+  loading?: boolean;
+  approximate?: boolean;
+};
 
 function CustomTooltip({
   active,
@@ -51,28 +46,15 @@ function CustomTooltip({
 }
 
 export default function PriceChart({
-  symbol,
-  initialPeriod = "1W",
-  showPeriodSelector = true,
+  points,
+  period,
   height = 90,
   color = "#007A4D",
   compact = false,
-  fallbackData = [],
-  fallbackDataByPeriod,
+  loading = false,
+  approximate = false,
 }: PriceChartProps) {
-  const [period, setPeriod] = useState<Period>(initialPeriod);
-  const { data, loading, error } = useChart(symbol, period);
-
-  const chartData = data?.data ?? [];
-  const periodFallbackData = fallbackDataByPeriod?.[period] ?? fallbackData;
-  const effectiveData = chartData.length > 0 ? chartData : periodFallbackData;
-  const firstClose = effectiveData[0]?.close;
-  const lastClose = effectiveData[effectiveData.length - 1]?.close;
-  const isPositive =
-    lastClose !== undefined && firstClose !== undefined ? lastClose >= firstClose : true;
-  const lineColor = isPositive ? color : "#E03A3E";
-
-  if (loading && effectiveData.length === 0) {
+  if (loading && points.length === 0) {
     return (
       <div
         style={{
@@ -89,7 +71,7 @@ export default function PriceChart({
     );
   }
 
-  if ((error && effectiveData.length === 0) || effectiveData.length === 0) {
+  if (points.length === 0) {
     return (
       <div
         style={{
@@ -106,10 +88,21 @@ export default function PriceChart({
     );
   }
 
+  const firstClose = points[0]?.close;
+  const lastClose = points[points.length - 1]?.close;
+  const isPositive =
+    lastClose !== undefined && firstClose !== undefined ? lastClose >= firstClose : true;
+  const lineColor = isPositive ? color : "#E03A3E";
+
   return (
     <div>
+      {approximate && (
+        <p className="text-[10px] text-gray-400 mb-1 text-center">
+          Approximate trend from live price
+        </p>
+      )}
       <ResponsiveContainer width="100%" height={height}>
-        <LineChart data={effectiveData} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
+        <LineChart data={points} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
           {!compact && (
             <XAxis
               dataKey="time"
@@ -140,20 +133,6 @@ export default function PriceChart({
           />
         </LineChart>
       </ResponsiveContainer>
-
-      {showPeriodSelector && (
-        <div style={{ display: "flex", gap: 4, marginTop: 8 }}>
-          {PERIODS.map((periodValue) => (
-            <button
-              key={periodValue}
-              onClick={() => setPeriod(periodValue)}
-              className={`period-btn${period === periodValue ? " active" : ""}`}
-            >
-              {periodValue}
-            </button>
-          ))}
-        </div>
-      )}
     </div>
   );
 }

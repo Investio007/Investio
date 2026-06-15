@@ -50,8 +50,7 @@ jobs:
         env:
           VITE_SUPABASE_URL: https://placeholder.supabase.co
           VITE_SUPABASE_ANON_KEY: placeholder-anon-key-for-ci
-          VITE_MARKET_API_URL: http://localhost:8000
-          VITE_ANTHROPIC_API_KEY: placeholder-anthropic-key-for-ci
+          VITE_MARKET_API_URL: http://localhost:8001
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4

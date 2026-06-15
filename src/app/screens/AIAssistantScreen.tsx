@@ -4,6 +4,7 @@ import { ArrowLeft, Send, Bot, User } from "lucide-react";
 import { Card } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { Button } from "../components/ui/button";
+import { aiApi } from "../services/aiApi";
 
 interface Message {
   role: "user" | "ai";
@@ -55,51 +56,10 @@ export function AIAssistantScreen() {
     setMessages((prev) => [...prev, { role: "user", text: question, risk: null }]);
     setLoading(true);
     try {
-      const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
-      if (!apiKey) {
-        throw new Error("Missing VITE_ANTHROPIC_API_KEY");
-      }
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": apiKey,
-          "anthropic-version": "2023-06-01",
-        },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 1000,
-          system: `You are Investio's AI investment advisor for South African users.
-Answer every question in simple, plain English. Maximum 3 sentences.
-Always end your response on a new line with exactly one of these:
-Risk Level: Low
-Risk Level: Moderate
-Risk Level: High
-Do not use markdown, bullet points, or formatting of any kind.`,
-          messages: [{ role: "user", content: question }],
-        }),
-      });
-      const data = await response.json();
-      const fullText =
-        data.content?.[0]?.text ||
-        "I couldn't get a response right now. Please try again.";
-      const lines = fullText.split("\n").filter((line: string) => line.trim());
-      const riskLine =
-        lines.find((line: string) =>
-          line.toLowerCase().startsWith("risk level:"),
-        ) || "";
-      const mainText = lines
-        .filter((line: string) => !line.toLowerCase().startsWith("risk level:"))
-        .join(" ")
-        .trim();
-      const riskValue = riskLine.replace(/risk level:/i, "").trim();
-      const normalizedRisk: Message["risk"] =
-        riskValue === "Low" || riskValue === "Moderate" || riskValue === "High"
-          ? riskValue
-          : null;
+      const data = await aiApi.chat(question);
       setMessages((prev) => [
         ...prev,
-        { role: "ai", text: mainText, risk: normalizedRisk },
+        { role: "ai", text: data.text, risk: data.risk },
       ]);
     } catch {
       setMessages((prev) => [
@@ -116,7 +76,7 @@ Do not use markdown, bullet points, or formatting of any kind.`,
   };
 
   return (
-    <div className="min-h-screen bg-[#F5F7FA] flex flex-col">
+    <div className="h-full min-h-0 flex flex-col bg-[#F5F7FA]">
       {/* Header */}
       <div className="bg-white px-6 pt-12 pb-6 rounded-b-3xl shadow-sm">
         <button
@@ -222,7 +182,7 @@ Do not use markdown, bullet points, or formatting of any kind.`,
       </div>
 
       {/* Input */}
-      <div className="bg-white border-t border-gray-200 px-6 py-4 safe-area-bottom">
+      <div className="shrink-0 bg-white border-t border-gray-200 px-6 py-4">
         <div className="flex gap-3">
           <Input
             value={input}

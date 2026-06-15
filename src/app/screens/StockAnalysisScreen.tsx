@@ -3,14 +3,16 @@ import { useLocation, useNavigate, useParams } from "react-router";
 import { ArrowLeft, TrendingUp, ArrowUp, ArrowDown } from "lucide-react";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
-import { useInvestio } from "../context/InvestioContext";
 import { assets, companies } from "../data/assets";
 import type { AnalysisValue } from "../data/assets";
 import PriceChart from "../components/PriceChart";
 import PriceSkeleton from "../components/PriceSkeleton";
-import { useQuote } from "../hooks/useMarketData";
+import { useMarketSnapshot } from "../hooks/useMarketData";
+import { useAddToPortfolioWithPicker } from "../hooks/useAddToPortfolioWithPicker";
 
-const API_BASE = import.meta.env.VITE_MARKET_API_URL || "";
+const API_BASE = import.meta.env.DEV
+  ? ""
+  : (import.meta.env.VITE_MARKET_API_URL || "");
 
 type SentimentData = {
   aiScore: number;
@@ -67,7 +69,7 @@ export function StockAnalysisScreen() {
   const navigate = useNavigate();
   const location = useLocation();
   const { symbol } = useParams<{ symbol: string }>();
-  const { addToPortfolio, toast } = useInvestio();
+  const { requestAdd, pickerDialog } = useAddToPortfolioWithPicker();
   const allItems = [...assets, ...companies];
   const symbolLookup = symbol
     ? allItems.find((item) => item.ticker === symbol)
@@ -77,7 +79,13 @@ export function StockAnalysisScreen() {
     ? allItems.find((item) => item.id === stateAssetId)
     : null;
   const stock = stateLookup || symbolLookup || assets[0];
-  const { data: quote, loading: quoteLoading, error: quoteError } = useQuote(stock.id);
+  const {
+    quote,
+    chart,
+    chartSource,
+    loading: quoteLoading,
+    error: quoteError,
+  } = useMarketSnapshot(stock.id, "1M");
 
   const [sentiment, setSentiment] = useState<SentimentData | null>(null);
   const [sentimentLoading, setSentimentLoading] = useState(true);
@@ -201,11 +209,12 @@ export function StockAnalysisScreen() {
           <div className="mt-6">
             <p className="text-sm text-gray-600 mb-3">Recent Price Movement</p>
             <PriceChart
-              symbol={stock.id}
-              initialPeriod="1M"
-              showPeriodSelector={false}
+              points={chart?.data ?? []}
+              period="1M"
               height={80}
               compact
+              loading={quoteLoading && (chart?.data?.length ?? 0) === 0}
+              approximate={chartSource === "synthetic" || chartSource === "stale_cache"}
               color="#007A4D"
             />
           </div>
@@ -262,32 +271,14 @@ export function StockAnalysisScreen() {
         </Card>
 
         <Button
-          onClick={() => addToPortfolio(stock)}
+          type="button"
+          onClick={() => requestAdd(stock)}
           className="w-full bg-[#0A1F44] hover:bg-[#0A1F44]/90 text-white h-14 rounded-2xl text-lg"
         >
           Add to Demo Portfolio
         </Button>
       </div>
-      {toast.visible && (
-        <div
-          className="toast"
-          style={{
-            position: "fixed",
-            bottom: 80,
-            left: "50%",
-            transform: "translateX(-50%)",
-            background: "#0A1F44",
-            color: "#fff",
-            padding: "10px 20px",
-            borderRadius: 20,
-            fontSize: 13,
-            zIndex: 999,
-            whiteSpace: "nowrap",
-          }}
-        >
-          {toast.message}
-        </div>
-      )}
+      {pickerDialog}
     </div>
   );
 }
