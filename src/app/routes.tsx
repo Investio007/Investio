@@ -1,6 +1,7 @@
 import { createBrowserRouter, Navigate } from "react-router";
 import { AppShell } from "./components/AppShell";
 import { ProtectedRoute } from "./components/ProtectedRoute";
+import { hasOAuthCallbackParams } from "./lib/oauthRedirect";
 import { SplashScreen } from "./screens/SplashScreen";
 import { OnboardingScreen } from "./screens/OnboardingScreen";
 import { AuthScreen } from "./screens/AuthScreen";
@@ -15,7 +16,12 @@ import { AddDemoFundsScreen } from "./screens/AddDemoFundsScreen";
 export const router = createBrowserRouter([
   {
     path: "/",
-    Component: () => <Navigate to="/splash" />,
+    Component: () =>
+      hasOAuthCallbackParams() ? (
+        <Navigate to="/auth/callback" replace />
+      ) : (
+        <Navigate to="/splash" />
+      ),
   },
   {
     path: "/splash",
