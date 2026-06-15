@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { BookOpen, Brain, Target, ChevronRight } from "lucide-react";
 import { Button } from "../components/ui/button";
+import { useInvestio } from "../context/InvestioContext";
 
 const slides = [
   {
@@ -24,6 +25,13 @@ const slides = [
 export function OnboardingScreen() {
   const [currentSlide, setCurrentSlide] = useState(0);
   const navigate = useNavigate();
+  const { user, authLoading } = useInvestio();
+
+  useEffect(() => {
+    if (!authLoading && user) {
+      navigate("/home", { replace: true });
+    }
+  }, [authLoading, navigate, user]);
 
   const handleNext = () => {
     if (currentSlide < slides.length - 1) {
@@ -41,7 +49,7 @@ export function OnboardingScreen() {
   const Icon = slide.icon;
 
   return (
-    <div className="h-full min-h-0 bg-white flex flex-col">
+    <div className="min-h-dvh h-dvh bg-white flex flex-col">
       <div className="flex-1 flex flex-col items-center justify-center px-8 py-12">
         <div className="w-full max-w-md flex flex-col items-center">
           {/* Illustration */}
