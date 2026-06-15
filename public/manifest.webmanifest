@@ -1,0 +1,18 @@
+{
+  "name": "Investio",
+  "short_name": "Investio",
+  "description": "AI-powered investment education for South African investors",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#0A1F44",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -76,7 +76,7 @@ export function OnboardingScreen() {
       </div>
 
       {/* Buttons */}
-      <div className="px-8 pb-8 space-y-3">
+      <div className="px-8 pb-8 safe-area-bottom space-y-3">
         {/* Disclaimer */}
         {currentSlide === slides.length - 1 && (
           <div className="mb-4 p-4 bg-[#F5F7FA] rounded-2xl">

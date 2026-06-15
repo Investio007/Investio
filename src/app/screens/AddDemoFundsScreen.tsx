@@ -18,9 +18,9 @@ export function AddDemoFundsScreen() {
   const quickAmounts = [1000, 5000, 10000, 25000];
 
   return (
-    <div className="min-h-screen bg-[#F5F7FA]">
+    <div className="min-h-full bg-[#F5F7FA]">
       {/* Header */}
-      <div className="bg-[#0A1F44] text-white px-6 pt-12 pb-8">
+      <div className="bg-[#0A1F44] text-white px-6 screen-header pb-8">
         <button
           onClick={() => navigate(-1)}
           className="mb-6 w-10 h-10 bg-white/10 rounded-full flex items-center justify-center hover:bg-white/20 transition-colors"

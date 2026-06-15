@@ -5,13 +5,16 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
+    "build:android": "npm run build && npx cap sync android",
     "typecheck": "tsc --noEmit",
     "sync:oauth": "node scripts/sync-oauth-to-supabase.mjs",
     "generate:apple-secret": "node scripts/generate-apple-client-secret.mjs",
     "dev": "vite",
     "dev:server": "node -e \"const p=require('path');const c=require('child_process');const isWin=process.platform==='win32';const py=isWin?p.join('venv','Scripts','python.exe'):p.join('venv','bin','python');const child=c.spawn(py,['-m','uvicorn','main:app','--reload','--port','8002'],{cwd:'server',stdio:'inherit',shell:false});child.on('exit',code=>process.exit(code??1));\"",
     "dev:all": "concurrently \"npm run dev\" \"npm run dev:server\"",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "cap:sync": "npx cap sync",
+    "cap:open:android": "npx cap open android"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",
@@ -74,6 +77,9 @@
     "vaul": "1.1.2"
   },
   "devDependencies": {
+    "@capacitor/android": "^7.4.2",
+    "@capacitor/cli": "^7.4.2",
+    "@capacitor/core": "^7.4.2",
     "@tailwindcss/vite": "4.1.12",
     "@types/react": "18.3.18",
     "@types/react-dom": "18.3.5",

@@ -1,5 +1,6 @@
 import { createBrowserRouter, Navigate } from "react-router";
 import { AppShell } from "./components/AppShell";
+import { ProtectedRoute } from "./components/ProtectedRoute";
 import { SplashScreen } from "./screens/SplashScreen";
 import { OnboardingScreen } from "./screens/OnboardingScreen";
 import { AuthScreen } from "./screens/AuthScreen";
@@ -33,44 +34,49 @@ export const router = createBrowserRouter([
     Component: AuthCallbackScreen,
   },
   {
-    Component: AppShell,
+    Component: ProtectedRoute,
     children: [
       {
-        path: "/home",
-        Component: HomeScreen,
+        Component: AppShell,
+        children: [
+          {
+            path: "/home",
+            Component: HomeScreen,
+          },
+          {
+            path: "/portfolio-builder",
+            Component: PortfolioBuilderScreen,
+          },
+          {
+            path: "/compare",
+            Component: CompareScreen,
+          },
+          {
+            path: "/ai-assistant",
+            Component: AIAssistantScreen,
+          },
+          {
+            path: "/advisor",
+            Component: AIAssistantScreen,
+          },
+        ],
       },
       {
-        path: "/portfolio-builder",
-        Component: PortfolioBuilderScreen,
+        path: "/stock/:symbol",
+        Component: StockAnalysisScreen,
       },
       {
-        path: "/compare",
-        Component: CompareScreen,
+        path: "/analysis",
+        Component: StockAnalysisScreen,
       },
       {
-        path: "/ai-assistant",
-        Component: AIAssistantScreen,
+        path: "/add-demo-funds",
+        Component: AddDemoFundsScreen,
       },
       {
-        path: "/advisor",
-        Component: AIAssistantScreen,
+        path: "/add-funds",
+        Component: AddDemoFundsScreen,
       },
     ],
-  },
-  {
-    path: "/stock/:symbol",
-    Component: StockAnalysisScreen,
-  },
-  {
-    path: "/analysis",
-    Component: StockAnalysisScreen,
-  },
-  {
-    path: "/add-demo-funds",
-    Component: AddDemoFundsScreen,
-  },
-  {
-    path: "/add-funds",
-    Component: AddDemoFundsScreen,
   },
 ]);
