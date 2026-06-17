@@ -190,6 +190,8 @@ Copy `.env.example` to `.env` in the project root and fill in keys.
 | `VITE_AUTH_RESET_REDIRECT_URL` | Optional | Custom password-reset redirect |
 | `VITE_SENTRY_DSN` | Production | Sentry React DSN for error monitoring |
 | `VITE_SENTRY_ENVIRONMENT` | Optional | e.g. `production`, `preview` |
+| `VITE_POSTHOG_KEY` | Optional | PostHog project API key (`phc_...`) |
+| `VITE_POSTHOG_HOST` | Optional | Default `https://us.i.posthog.com` |
 
 #### Backend (`.env` or Railway env — **never** use `VITE_*` for secrets)
 
@@ -323,6 +325,27 @@ npm run qa
 See **[TESTING.md](TESTING.md)** for the full pre-release checklist (auth, responsive layout, portfolio, compare, AI advisor, production sign-off).
 
 **v0.1 status:** Production QA complete — auth, password reset, live market data, portfolio performance, and AI insights verified on https://investio-wheat.vercel.app.
+
+---
+
+## Product analytics (PostHog)
+
+Investio uses **PostHog** for pageviews and product analytics (SPA route tracking + identified users when signed in).
+
+### Setup
+
+1. Create a project at [PostHog](https://posthog.com) (US cloud: `us.posthog.com`).
+2. Copy **Project API key** (`phc_...`) from Project Settings.
+3. Add to **Vercel** (and local `.env`):
+   - `VITE_POSTHOG_KEY` — your `phc_...` key
+   - `VITE_POSTHOG_HOST` — `https://us.i.posthog.com` (optional if using US cloud)
+4. Redeploy Vercel.
+
+Initializes in `src/lib/posthog.ts` only when `VITE_POSTHOG_KEY` is set. Captures `$pageview` on React Router navigation and identifies users by Supabase id after sign-in.
+
+### Verify
+
+Open the app, navigate a few screens, then check PostHog → **Activity** or onboarding **Verify installation** — events should appear within ~1 minute.
 
 ---
 
