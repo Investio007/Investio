@@ -8,11 +8,8 @@ import type { AnalysisValue } from "../data/assets";
 import PriceChart from "../components/PriceChart";
 import PriceSkeleton from "../components/PriceSkeleton";
 import { useMarketSnapshot } from "../hooks/useMarketData";
+import { getMarketApiBaseUrl } from "../lib/marketApiBaseUrl";
 import { useAddToPortfolioWithPicker } from "../hooks/useAddToPortfolioWithPicker";
-
-const API_BASE = import.meta.env.DEV
-  ? ""
-  : (import.meta.env.VITE_MARKET_API_URL || "");
 
 type SentimentData = {
   aiScore: number;
@@ -93,7 +90,7 @@ export function StockAnalysisScreen() {
   useEffect(() => {
     let cancelled = false;
     setSentimentLoading(true);
-    fetch(`${API_BASE}/api/sentiment/${stock.id}`, { cache: "no-store" })
+    fetch(`${getMarketApiBaseUrl()}/api/sentiment/${stock.id}`, { cache: "no-store" })
       .then((res) => (res.ok ? res.json() : Promise.reject(new Error("Sentiment unavailable"))))
       .then((data: SentimentData) => {
         if (!cancelled) setSentiment(data);

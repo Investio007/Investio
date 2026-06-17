@@ -1,6 +1,6 @@
-const BASE_URL = import.meta.env.DEV
-  ? ""
-  : (import.meta.env.VITE_MARKET_API_URL || "");
+import { getMarketApiBaseUrl } from "../lib/marketApiBaseUrl";
+
+const BASE_URL = getMarketApiBaseUrl();
 
 export type AiRiskLevel = "Low" | "Moderate" | "High";
 
