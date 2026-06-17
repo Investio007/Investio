@@ -1,5 +1,6 @@
 fastapi==0.111.0
 uvicorn==0.29.0
+sentry-sdk[fastapi]>=2.0.0
 yfinance
 pandas
 python-dotenv==1.0.1

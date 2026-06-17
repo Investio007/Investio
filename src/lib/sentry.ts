@@ -16,6 +16,10 @@ export function initSentry(): void {
     replaysOnErrorSampleRate: 1.0,
     dataCollection: {},
   });
+
+  if (import.meta.env.DEV) {
+    (window as Window & { Sentry?: typeof Sentry }).Sentry = Sentry;
+  }
 }
 
 export { Sentry };
