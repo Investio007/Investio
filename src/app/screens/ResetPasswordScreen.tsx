@@ -13,8 +13,7 @@ import {
 } from "../lib/authSessionFromUrl";
 import { updatePassword } from "../services/supabaseDb";
 import { isSupabaseConfigured, supabase } from "../../lib/supabase";
-
-const MIN_PASSWORD_LENGTH = 8;
+import { MIN_PASSWORD_LENGTH } from "../lib/authConstants";
 
 export function ResetPasswordScreen() {
   const navigate = useNavigate();

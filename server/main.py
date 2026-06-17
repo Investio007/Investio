@@ -97,6 +97,9 @@ ENVIRONMENT = os.getenv("ENVIRONMENT", "development").strip().lower()
 ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "").strip()
 AI_RATE_LIMIT = int(os.getenv("AI_RATE_LIMIT", "30"))
 AI_RATE_WINDOW = int(os.getenv("AI_RATE_WINDOW", "60"))
+MARKET_RATE_LIMIT = int(os.getenv("MARKET_RATE_LIMIT", "120"))
+MARKET_RATE_WINDOW = int(os.getenv("MARKET_RATE_WINDOW", "60"))
+AV_DAILY_LIMIT = int(os.getenv("ALPHA_VANTAGE_DAILY_LIMIT", "25"))
 
 _DEFAULT_CORS_ORIGINS = [
     "http://localhost:5173",
@@ -115,6 +118,9 @@ _extra_cors = [
 CORS_ALLOW_ORIGINS = _DEFAULT_CORS_ORIGINS + _extra_cors
 
 _ai_rate_buckets: dict[str, list[float]] = defaultdict(list)
+_market_rate_buckets: dict[str, list[float]] = defaultdict(list)
+_av_daily_count = 0
+_av_daily_date = ""
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -141,6 +147,27 @@ app.add_middleware(
     allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],
 )
+
+_MARKET_RATE_PATHS = (
+    "/api/quote/",
+    "/api/chart/",
+    "/api/snapshot/",
+    "/api/compare",
+    "/api/insights",
+    "/api/sentiment/",
+)
+
+
+@app.middleware("http")
+async def market_rate_limit_middleware(request: Request, call_next):
+    if request.method == "GET":
+        path = request.url.path
+        if any(
+            path.startswith(prefix) or path == prefix.rstrip("/")
+            for prefix in _MARKET_RATE_PATHS
+        ):
+            enforce_market_rate_limit(request)
+    return await call_next(request)
 
 # ─── User-Agent rotation for yfinance fallback ────────────────────────────────
 
@@ -301,7 +328,27 @@ _av_disabled_until: float = 0.0
 
 
 def alpha_vantage_enabled() -> bool:
-    return bool(ALPHA_VANTAGE_KEY) and time.time() >= _av_disabled_until
+    return (
+        bool(ALPHA_VANTAGE_KEY)
+        and time.time() >= _av_disabled_until
+        and alpha_vantage_quota_available()
+    )
+
+
+def record_alpha_vantage_call() -> None:
+    global _av_daily_count, _av_daily_date
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    if _av_daily_date != today:
+        _av_daily_date = today
+        _av_daily_count = 0
+    _av_daily_count += 1
+
+
+def alpha_vantage_quota_available() -> bool:
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    if _av_daily_date != today:
+        return True
+    return _av_daily_count < AV_DAILY_LIMIT
 
 
 def disable_alpha_vantage_temporarily(seconds: int = 600) -> None:
@@ -378,14 +425,29 @@ def client_ip(request: Request) -> str:
     return "unknown"
 
 
-def enforce_rate_limit(request: Request, limit: int = AI_RATE_LIMIT) -> None:
+def _enforce_ip_rate_limit(
+    request: Request,
+    buckets: dict[str, list[float]],
+    limit: int,
+    window: int,
+) -> None:
     ip = client_ip(request)
     now = time.time()
-    bucket = _ai_rate_buckets[ip]
-    _ai_rate_buckets[ip] = [stamp for stamp in bucket if now - stamp < AI_RATE_WINDOW]
-    if len(_ai_rate_buckets[ip]) >= limit:
+    bucket = buckets[ip]
+    buckets[ip] = [stamp for stamp in bucket if now - stamp < window]
+    if len(buckets[ip]) >= limit:
         raise HTTPException(status_code=429, detail="Too many requests. Try again shortly.")
-    _ai_rate_buckets[ip].append(now)
+    buckets[ip].append(now)
+
+
+def enforce_rate_limit(request: Request, limit: int = AI_RATE_LIMIT) -> None:
+    _enforce_ip_rate_limit(request, _ai_rate_buckets, limit, AI_RATE_WINDOW)
+
+
+def enforce_market_rate_limit(request: Request) -> None:
+    _enforce_ip_rate_limit(
+        request, _market_rate_buckets, MARKET_RATE_LIMIT, MARKET_RATE_WINDOW
+    )
 
 
 def require_admin(request: Request) -> None:
@@ -739,6 +801,7 @@ def fetch_quote_alphavantage(ticker_symbol: str) -> dict:
     if not ALPHA_VANTAGE_KEY:
         raise RuntimeError("ALPHA_VANTAGE_KEY not set")
 
+    record_alpha_vantage_call()
     resp = req_lib.get(
         AV_BASE,
         params={
@@ -811,6 +874,7 @@ def fetch_chart_alphavantage(ticker_symbol: str, period: str) -> list[dict]:
         }
         time_key = "Weekly Time Series"
 
+    record_alpha_vantage_call()
     resp = req_lib.get(AV_BASE, params=params, timeout=10)
     resp.raise_for_status()
     data = resp.json()
@@ -1175,8 +1239,14 @@ async def root_health():
 
 @app.get("/api/health")
 async def health():
+    quota = {
+        "daily_limit": AV_DAILY_LIMIT,
+        "calls_today": _av_daily_count,
+        "date": _av_daily_date or datetime.utcnow().strftime("%Y-%m-%d"),
+        "exhausted": not alpha_vantage_quota_available(),
+    }
     if ENVIRONMENT == "production":
-        return {"status": "ok"}
+        return {"status": "ok", "alpha_vantage_quota": quota}
     ollama_base, ollama_key, ollama_model = get_ollama_settings()
     return {
         "status": "ok",
@@ -1187,6 +1257,7 @@ async def health():
             "finnhub": bool(FINNHUB_API_KEY),
             "alpha_vantage": bool(ALPHA_VANTAGE_KEY),
         },
+        "alpha_vantage_quota": quota,
         "ai": {
             "provider": "ollama",
             "model": ollama_model,
@@ -1838,6 +1909,7 @@ def fetch_fundamentals_alphavantage(ticker_symbol: str) -> Optional[dict[str, fl
     if not ALPHA_VANTAGE_KEY:
         return None
     try:
+        record_alpha_vantage_call()
         resp = req_lib.get(
             AV_BASE,
             params={
@@ -1867,6 +1939,7 @@ def fetch_news_sentiment_alphavantage(ticker_symbol: str) -> Optional[float]:
     if not ALPHA_VANTAGE_KEY:
         return None
     try:
+        record_alpha_vantage_call()
         resp = req_lib.get(
             AV_BASE,
             params={

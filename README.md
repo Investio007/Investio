@@ -83,13 +83,18 @@ flowchart LR
     SB[(Supabase Auth + DB)]
     FH[Finnhub / yfinance]
     OL[Ollama AI]
+    PH[PostHog]
+    SE[Sentry]
   end
   Vite -->|same-origin /api| Proxy
   Vite -->|optional direct| API
   Proxy --> API
   Vite --> SB
+  Vite --> PH
+  Vite --> SE
   API --> FH
   API --> OL
+  API --> SE
 ```
 
 **How market data reaches production**
@@ -111,6 +116,7 @@ flowchart LR
 | AI | Ollama (`gemma3:4b` on Ollama Cloud by default) |
 | Auth & cloud | Supabase (profiles, portfolio sync, Google OAuth, password reset) |
 | Hosting | Vercel (frontend), Railway (backend) |
+| Observability | Sentry (errors), PostHog (analytics), UptimeRobot (uptime) |
 | CI | GitHub Actions (frontend build/typecheck, backend smoke tests, secrets scan) |
 
 ---
@@ -129,8 +135,10 @@ flowchart LR
 │   └── data/             # assets, countryMarkets, portfolioCatalog
 ├── server/
 │   ├── main.py           # FastAPI market + AI API
+│   ├── sentry_init.py    # Sentry init (skips invalid DSN)
 │   ├── Procfile          # Railway start command
-│   └── nixpacks.toml
+│   ├── nixpacks.toml
+│   └── railway.toml      # Railway deploy + healthcheck config
 ├── scripts/
 │   ├── qa-smoke.mjs      # Production smoke tests (22 checks)
 │   └── sync-oauth-to-supabase.mjs
@@ -138,7 +146,7 @@ flowchart LR
 ├── public/               # logo.png, icon.svg, favicons
 ├── .github/workflows/    # CI/CD pipelines
 ├── vercel.json           # SPA rewrite + /api proxy to Railway
-├── railway.toml          # Railway deploy config
+├── railway.toml          # Notes only — deploy config lives in server/railway.toml
 ├── TESTING.md            # Manual QA checklist
 └── .env.example          # Environment variable template
 ```
@@ -205,7 +213,9 @@ Copy `.env.example` to `.env` in the project root and fill in keys.
 | `CORS_ORIGINS` | Production | `https://investio-wheat.vercel.app` |
 | `ADMIN_API_KEY` | Optional | Protects cache admin endpoints |
 | `AI_RATE_LIMIT` | Optional | Requests/min per IP for `/api/ai/chat` (default 30) |
-| `SENTRY_DSN` | Production | FastAPI Sentry DSN (server-side only) |
+| `MARKET_RATE_LIMIT` | Optional | Requests/min per IP for market GET endpoints (default 120) |
+| `ALPHA_VANTAGE_DAILY_LIMIT` | Optional | Max Alpha Vantage calls per day (default 25) |
+| `SENTRY_DSN` | Production | FastAPI Sentry DSN — **must** start with `https://` (malformed values are skipped; see Troubleshooting) |
 | `SENTRY_ENVIRONMENT` | Optional | e.g. `production` |
 
 > Never put secret keys in `VITE_*` variables — those are exposed to the browser.
@@ -239,6 +249,7 @@ Vite proxies `/api/*` to port **8002** in development.
 | `npm run qa` | typecheck + build + production smoke tests |
 | `npm run qa:smoke` | 22 automated checks against production |
 | `npm run sync:oauth` | Sync OAuth + redirect URLs to Supabase |
+| `docker compose up api` | Run backend in Docker (port 8002) |
 | `npm run build:android` | Build + Capacitor sync for Android |
 
 ---
@@ -252,6 +263,7 @@ Vite proxies `/api/*` to port **8002** in development.
    - `VITE_SUPABASE_URL`
    - `VITE_SUPABASE_ANON_KEY`
    - `VITE_SENTRY_DSN` — optional, recommended for production error monitoring
+   - `VITE_POSTHOG_KEY` — optional, recommended for product analytics
    - `VITE_MARKET_API_URL` — **optional** (recommended: leave unset and use `vercel.json` proxy)
 3. Deploy from `main`. `vercel.json` handles:
    - `/api/:path*` → Railway backend
@@ -260,12 +272,27 @@ Vite proxies `/api/*` to port **8002** in development.
 ### Backend — Railway
 
 1. Create a service from the repo; set **Root Directory** to `server`.
-2. Set environment variables: `FINNHUB_API_KEY`, `OLLAMA_API_KEY`, `OLLAMA_MODEL`, `ENVIRONMENT=production`, `CORS_ORIGINS=https://investio-wheat.vercel.app`.
-3. Railway uses `railway.toml` / `Procfile`: `uvicorn main:app --host 0.0.0.0 --port $PORT`.
-4. Health check path must be **`/api/health`** (configured in `railway.toml` — `/` returns 404 on FastAPI).
-4. Verify: `https://<your-service>.up.railway.app/api/health` returns `"status":"ok"`.
+2. Set environment variables:
+   - `FINNHUB_API_KEY`, `OLLAMA_API_KEY`, `OLLAMA_MODEL`
+   - `ENVIRONMENT=production`
+   - `CORS_ORIGINS=https://investio-wheat.vercel.app`
+   - `SENTRY_DSN` — optional; full DSN starting with `https://` (see [Error monitoring](#error-monitoring-sentry))
+3. Deploy config is in **`server/railway.toml`** (read when root dir is `server/`):
+   - Start: `uvicorn main:app --host 0.0.0.0 --port $PORT`
+   - Healthcheck path: `/api/health` (also `GET /` and `GET /health` return `{"status":"ok"}`)
+4. Verify: `https://investio-production.up.railway.app/api/health` returns `"status":"ok"`.
 
 Update `vercel.json` if your Railway URL changes.
+
+### Uptime monitoring
+
+[UptimeRobot](https://uptimerobot.com) (or similar) can watch the production auth page:
+
+| Monitor | URL |
+|---------|-----|
+| Web availability | `https://investio-wheat.vercel.app/auth` |
+
+API health can be monitored separately at `https://investio-production.up.railway.app/api/health`.
 
 ### Supabase
 
@@ -290,7 +317,9 @@ Update `vercel.json` if your Railway URL changes.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/api/health` | Server status, data sources, AI config |
+| `GET` | `/` | Lightweight liveness (`{"status":"ok"}`) |
+| `GET` | `/health` | Same as `/` (Railway / load-balancer friendly) |
+| `GET` | `/api/health` | Server status, data sources, AI + Sentry config |
 | `GET` | `/api/quote/{symbol}` | Live quote |
 | `GET` | `/api/chart/{symbol}/{period}` | Chart data (`1D`–`1Y`) |
 | `GET` | `/api/snapshot/{symbol}/{period}` | Quote + chart bundle |
@@ -325,7 +354,9 @@ npm run qa
 
 See **[TESTING.md](TESTING.md)** for the full pre-release checklist (auth, responsive layout, portfolio, compare, AI advisor, production sign-off).
 
-**v0.1 status:** Production QA complete — auth, password reset, live market data, portfolio performance, and AI insights verified on https://investio-wheat.vercel.app.
+**v0.1 status:** Production QA complete — auth, password reset, live market data, portfolio performance, AI insights, Sentry, PostHog, and uptime monitoring verified on https://investio-wheat.vercel.app.
+
+See **[docs/investio-live-status.html](docs/investio-live-status.html)** for a visual stack completion dashboard (open in browser).
 
 ---
 
@@ -370,11 +401,11 @@ Initializes in `src/lib/sentry.ts` only when `VITE_SENTRY_DSN` is set.
 
 1. Create a **FastAPI** project in Sentry.
 2. Add to **Railway** → Variables:
-   - `SENTRY_DSN` — FastAPI DSN
+   - `SENTRY_DSN` — full FastAPI DSN starting with `https://` (e.g. `https://abc@o123.ingest.us.sentry.io/456`)
    - `SENTRY_ENVIRONMENT` — `production` (optional; falls back to `ENVIRONMENT`)
 3. Redeploy the Railway service.
 
-Initializes in `server/sentry_init.py` before the FastAPI app starts.
+Initializes in `server/sentry_init.py` before the FastAPI app starts. Invalid or malformed DSNs are logged and skipped so the API still starts (deploy healthchecks won't fail).
 
 **Local verify** (dev only):
 
@@ -394,6 +425,8 @@ Then check **Sentry → Issues** for the backend project. This route returns 404
 | `backend-ci.yml` | All PRs, `server/**` | Import check, health + cache smoke test |
 | `secrets-scan.yml` | Push / PR | Gitleaks |
 | `sync-oauth-providers.yml` | Manual | Push OAuth + redirect config to Supabase |
+| `uptime-check.yml` | Every 5 min | Vercel `/auth` + Railway `/api/health` |
+| `supabase-backup.yml` | Weekly (Sunday) | `pg_dump` → GitHub artifact (needs `SUPABASE_DB_URL`) |
 
 Branch protection on `main` requires CI to pass before merge.
 
@@ -406,15 +439,13 @@ Branch protection on `main` requires CI to pass before merge.
 - Row Level Security on `profiles` and `portfolio_items`
 - API keys server-side only; Gitleaks in CI
 - CORS restricted in production via `CORS_ORIGINS`
-- AI endpoint IP rate limiting
+- AI + public market endpoint IP rate limiting
+- Minimum 8-character passwords on sign-up and reset
+- Vercel security headers (CSP, HSTS, X-Frame-Options) in `vercel.json`
+- Backend security headers in production (`SecurityHeadersMiddleware`)
 - Demo auth bypass disabled in production builds
-- Sentry error boundary + optional `VITE_SENTRY_DSN` monitoring
-
-**Recommended hardening (not yet implemented)**
-- API-wide rate limits on public market endpoints
-- Minimum 8-character signup passwords
-- Vercel security headers (CSP, etc.)
-- Optional JWT on AI endpoint
+- Sentry error boundary + `VITE_SENTRY_DSN` / `SENTRY_DSN` monitoring
+- PostHog analytics with custom product events
 
 ---
 
@@ -430,6 +461,15 @@ Configure `VITE_AUTH_REDIRECT_URL` and add matching URLs in Supabase for deep-li
 ---
 
 ## Troubleshooting
+
+### Railway deploy fails at "Healthcheck failure"
+
+1. Open **Railway → Investio → Deployments** and click **Diagnose** on the failed step.
+2. Common causes:
+   - **Invalid `SENTRY_DSN`** — must be a full URL starting with `https://`, or remove the variable. A malformed DSN crashes startup before uvicorn listens.
+   - **Wrong healthcheck path** — set **Healthcheck Path** to `/api/health` in service Settings, or rely on `server/railway.toml`.
+   - **Root directory** — must be `server` (not repo root).
+3. Confirm the active deploy: `curl https://investio-production.up.railway.app/api/health` → `"status":"ok"`.
 
 ### Production shows `$ —`, "Chart unavailable", or failed AI rankings
 

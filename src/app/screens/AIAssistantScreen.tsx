@@ -5,6 +5,7 @@ import { Card } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { Button } from "../components/ui/button";
 import { aiApi } from "../services/aiApi";
+import { captureEvent } from "../../lib/analytics";
 import { useVisualViewportPadding } from "../hooks/useVisualViewportPadding";
 
 interface Message {
@@ -57,6 +58,7 @@ export function AIAssistantScreen() {
     setInput("");
     setMessages((prev) => [...prev, { role: "user", text: question, risk: null }]);
     setLoading(true);
+    captureEvent("ai_question_asked", { question_length: question.length });
     try {
       const data = await aiApi.chat(question);
       setMessages((prev) => [

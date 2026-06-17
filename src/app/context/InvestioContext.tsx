@@ -12,6 +12,7 @@ import type { User } from "@supabase/supabase-js";
 import { clearDemoSession } from "../lib/auth";
 import type { InvestioAsset } from "../data/assets";
 import { isSupabaseConfigured, supabase } from "../../lib/supabase";
+import { captureEvent } from "../../lib/analytics";
 import {
   loadUserAppData,
   saveUserAppData,
@@ -233,6 +234,10 @@ export function InvestioProvider({ children }: { children: ReactNode }) {
       portfolios: [portfolio, ...prev.portfolios],
     }));
     showToast(`Portfolio "${portfolio.name}" created`);
+    captureEvent("portfolio_created", {
+      portfolio_id: portfolio.id,
+      portfolio_name: portfolio.name,
+    });
     return portfolio.id;
   };
 

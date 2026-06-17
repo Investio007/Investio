@@ -10,6 +10,7 @@ import PriceSkeleton from "../components/PriceSkeleton";
 import { useMarketSnapshot } from "../hooks/useMarketData";
 import { getMarketApiBaseUrl } from "../lib/marketApiBaseUrl";
 import { useAddToPortfolioWithPicker } from "../hooks/useAddToPortfolioWithPicker";
+import { captureEvent } from "../../lib/analytics";
 
 type SentimentData = {
   aiScore: number;
@@ -105,6 +106,14 @@ export function StockAnalysisScreen() {
       cancelled = true;
     };
   }, [stock.id]);
+
+  useEffect(() => {
+    captureEvent("stock_viewed", {
+      stock_id: stock.id,
+      ticker: stock.ticker,
+      name: stock.name,
+    });
+  }, [stock.id, stock.ticker, stock.name]);
 
   const aiScore = sentiment?.aiScore ?? stock.aiScore;
   const ratingLabel =
