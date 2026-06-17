@@ -21,6 +21,10 @@ _PROJECT_ROOT = _SERVER_DIR.parent
 load_dotenv(_PROJECT_ROOT / ".env", override=True)
 load_dotenv(_SERVER_DIR / ".env", override=True)
 
+from sentry_init import init_sentry
+
+SENTRY_ENABLED = init_sentry()
+
 # ─── Primary data source: Fincept Terminal (fallback to yfinance) ─────────────
 try:
     from fincept_terminal import FinceptClient  # type: ignore
@@ -1182,7 +1186,16 @@ async def health():
             "model": ollama_model,
             "configured": bool(ollama_key) or ollama_base == "http://localhost:11434",
         },
+        "sentry": SENTRY_ENABLED,
     }
+
+
+@app.get("/api/sentry-debug")
+async def sentry_debug():
+    """Dev-only: trigger a test error for Sentry verify. Disabled in production."""
+    if ENVIRONMENT == "production":
+        raise HTTPException(status_code=404, detail="Not found")
+    _ = 1 / 0
 
 
 @app.post("/api/ai/chat", response_model=ChatResponse)

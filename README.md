@@ -203,6 +203,8 @@ Copy `.env.example` to `.env` in the project root and fill in keys.
 | `CORS_ORIGINS` | Production | `https://investio-wheat.vercel.app` |
 | `ADMIN_API_KEY` | Optional | Protects cache admin endpoints |
 | `AI_RATE_LIMIT` | Optional | Requests/min per IP for `/api/ai/chat` (default 30) |
+| `SENTRY_DSN` | Production | FastAPI Sentry DSN (server-side only) |
+| `SENTRY_ENVIRONMENT` | Optional | e.g. `production` |
 
 > Never put secret keys in `VITE_*` variables — those are exposed to the browser.
 
@@ -326,23 +328,37 @@ See **[TESTING.md](TESTING.md)** for the full pre-release checklist (auth, respo
 
 ## Error monitoring (Sentry)
 
-Investio uses **@sentry/react** for production error tracking, performance traces, and session replay on errors.
+Investio uses Sentry on **frontend** (`@sentry/react`) and **backend** (`sentry-sdk` + FastAPI).
 
-### Setup
+### Frontend (Vercel)
 
 1. Create a **React** project in [Sentry](https://sentry.io).
 2. Add to **Vercel** → Environment Variables (Production):
-   - `VITE_SENTRY_DSN` — your Sentry DSN (public; safe in frontend)
+   - `VITE_SENTRY_DSN` — React DSN
    - `VITE_SENTRY_ENVIRONMENT` — `production` (optional)
 3. Redeploy Vercel after adding env vars.
 
-Sentry initializes in `src/lib/sentry.ts` only when `VITE_SENTRY_DSN` is set. No DSN → no overhead in local dev.
+Initializes in `src/lib/sentry.ts` only when `VITE_SENTRY_DSN` is set.
 
-### Verify
+**Local verify:** `Sentry.captureException(new Error("test"))` in the browser console (dev exposes `window.Sentry`).
 
-After deploy, check **Sentry → Issues** after using the app or Sentry’s test error button.
+### Backend (Railway)
 
-Optional later: add a **FastAPI** Sentry project for the Railway backend (`sentry-sdk`).
+1. Create a **FastAPI** project in Sentry.
+2. Add to **Railway** → Variables:
+   - `SENTRY_DSN` — FastAPI DSN
+   - `SENTRY_ENVIRONMENT` — `production` (optional; falls back to `ENVIRONMENT`)
+3. Redeploy the Railway service.
+
+Initializes in `server/sentry_init.py` before the FastAPI app starts.
+
+**Local verify** (dev only):
+
+```bash
+curl http://127.0.0.1:8002/api/sentry-debug
+```
+
+Then check **Sentry → Issues** for the backend project. This route returns 404 in production.
 
 ---
 
