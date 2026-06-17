@@ -6,6 +6,9 @@ import { SplashScreen } from "./screens/SplashScreen";
 import { OnboardingScreen } from "./screens/OnboardingScreen";
 import { AuthScreen } from "./screens/AuthScreen";
 import { AuthCallbackScreen } from "./screens/AuthCallbackScreen";
+import { ForgotPasswordScreen } from "./screens/ForgotPasswordScreen";
+import { ResetPasswordScreen } from "./screens/ResetPasswordScreen";
+import { LegalPolicyScreen } from "./screens/LegalPolicyScreen";
 import { HomeScreen } from "./screens/HomeScreen";
 import { StockAnalysisScreen } from "./screens/StockAnalysisScreen";
 import { PortfolioBuilderScreen } from "./screens/PortfolioBuilderScreen";
@@ -38,6 +41,18 @@ export const router = createBrowserRouter([
   {
     path: "/auth/callback",
     Component: AuthCallbackScreen,
+  },
+  {
+    path: "/auth/forgot-password",
+    Component: ForgotPasswordScreen,
+  },
+  {
+    path: "/auth/reset-password",
+    Component: ResetPasswordScreen,
+  },
+  {
+    path: "/legal/:policyId",
+    Component: LegalPolicyScreen,
   },
   {
     Component: ProtectedRoute,

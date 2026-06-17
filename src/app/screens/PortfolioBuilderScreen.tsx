@@ -1,12 +1,16 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import {
+  ArrowDown,
   ArrowLeft,
+  ArrowUp,
   Briefcase,
   ChevronRight,
   Plus,
   Search,
   Trash2,
+  TrendingDown,
+  TrendingUp,
   X,
 } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
@@ -29,6 +33,16 @@ import { useInvestio } from "../context/InvestioContext";
 import { getPickableAssets } from "../data/portfolioCatalog";
 import type { InvestioAsset } from "../data/assets";
 import type { PortfolioConfig } from "../services/supabaseDb";
+import type { UserPortfolio } from "../types/portfolio";
+import { usePortfolioQuotes } from "../hooks/useMarketData";
+import {
+  computePortfolioPerformance,
+  formatChangePercent,
+  formatQuotePrice,
+  formatRand,
+  holdingDayPnl,
+} from "../lib/portfolioPerformance";
+import type { QuoteData } from "../services/marketApi";
 
 const COLORS = ["#007A4D", "#3B82F6", "#FFB612"];
 
@@ -60,6 +74,376 @@ function riskLabel(riskIndex: number) {
   if (riskIndex === 0) return "Low";
   if (riskIndex === 1) return "Medium";
   return "High";
+}
+
+function PerformanceBadge({
+  quote,
+  size = "sm",
+}: {
+  quote: QuoteData | undefined;
+  size?: "sm" | "md";
+}) {
+  if (!quote || quote.changePercent == null) {
+    return (
+      <span className="text-xs text-gray-400 font-medium">—</span>
+    );
+  }
+
+  const positive = quote.changePositive;
+  const textClass =
+    size === "md" ? "text-sm font-semibold" : "text-xs font-semibold";
+  const Icon = positive ? ArrowUp : ArrowDown;
+
+  return (
+    <span
+      className={`inline-flex items-center gap-0.5 ${textClass} ${
+        positive ? "text-[#007A4D]" : "text-[#E03A3E]"
+      }`}
+    >
+      <Icon className={size === "md" ? "w-4 h-4" : "w-3 h-3"} />
+      {formatChangePercent(quote)}
+    </span>
+  );
+}
+
+function PortfolioSummaryCard({
+  performance,
+  loading,
+}: {
+  performance: ReturnType<typeof computePortfolioPerformance>;
+  loading: boolean;
+}) {
+  const positive =
+    performance.avgChangePercent != null && performance.avgChangePercent >= 0;
+
+  return (
+    <Card className="p-5 rounded-3xl shadow-sm border-0 bg-[#0A1F44] text-white">
+      <p className="text-white/70 text-xs uppercase tracking-wide mb-1">
+        Demo portfolio value
+      </p>
+      <p className="text-3xl font-bold mb-4">
+        {formatRand(performance.totalValue)}
+      </p>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <p className="text-white/70 text-xs mb-1">Today&apos;s move</p>
+          {loading && performance.quotedCount === 0 ? (
+            <div className="h-6 w-24 bg-white/10 rounded animate-pulse" />
+          ) : performance.avgChangePercent != null ? (
+            <p
+              className={`text-lg font-bold flex items-center gap-1 ${
+                positive ? "text-[#7DFFB3]" : "text-[#FF8A8A]"
+              }`}
+            >
+              {positive ? (
+                <TrendingUp className="w-5 h-5" />
+              ) : (
+                <TrendingDown className="w-5 h-5" />
+              )}
+              {positive ? "+" : ""}
+              {performance.avgChangePercent.toFixed(2)}%
+              {performance.dayPnl != null && (
+                <span className="text-sm font-medium text-white/80 ml-1">
+                  ({positive ? "+" : "−"}
+                  {formatRand(performance.dayPnl)})
+                </span>
+              )}
+            </p>
+          ) : (
+            <p className="text-sm text-white/60">Prices updating…</p>
+          )}
+        </div>
+        <div>
+          <p className="text-white/70 text-xs mb-1">Holdings</p>
+          <p className="text-lg font-bold">
+            {performance.holdingCount}{" "}
+            {performance.holdingCount === 1 ? "company" : "companies"}
+          </p>
+          <p className="text-xs text-white/60 mt-1">
+            {performance.gainers} up · {performance.losers} down
+            {performance.flat > 0 ? ` · ${performance.flat} flat` : ""}
+          </p>
+        </div>
+      </div>
+
+      <p className="text-[11px] text-white/50 mt-4 leading-relaxed">
+        Equal-weight demo split (
+        {formatRand(performance.perHoldingValue)} per company). Day change uses
+        live market prices.
+      </p>
+    </Card>
+  );
+}
+
+function HoldingRow({
+  asset,
+  quote,
+  perHoldingValue,
+  onRemove,
+  onOpen,
+}: {
+  asset: InvestioAsset;
+  quote: QuoteData | undefined;
+  perHoldingValue: number;
+  onRemove: () => void;
+  onOpen: () => void;
+}) {
+  const dayPnl = holdingDayPnl(perHoldingValue, quote);
+  const positive = quote?.changePositive ?? true;
+
+  return (
+    <Card className="p-0 rounded-2xl shadow-sm border-0 overflow-hidden">
+      <button
+        type="button"
+        onClick={onOpen}
+        className="w-full p-4 text-left hover:bg-[#F5F7FA]/80 transition-colors"
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 mb-0.5">
+              <h3 className="font-bold text-[#0A1F44] truncate">{asset.name}</h3>
+              <ChevronRight className="w-4 h-4 text-gray-300 shrink-0" />
+            </div>
+            <p className="text-sm text-gray-500">{asset.ticker}</p>
+          </div>
+          <div className="text-right shrink-0">
+            <p className="font-semibold text-[#0A1F44]">
+              {formatQuotePrice(quote)}
+            </p>
+            <PerformanceBadge quote={quote} />
+          </div>
+        </div>
+
+        <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between gap-2 text-xs">
+          <span className="text-gray-500">
+            Demo share: {formatRand(perHoldingValue)}
+          </span>
+          {dayPnl != null ? (
+            <span
+              className={`font-semibold ${
+                positive ? "text-[#007A4D]" : "text-[#E03A3E]"
+              }`}
+            >
+              Today: {dayPnl >= 0 ? "+" : "−"}
+              {formatRand(dayPnl)}
+            </span>
+          ) : (
+            <span className="text-gray-400">Today: —</span>
+          )}
+        </div>
+      </button>
+      <div className="px-4 pb-3 flex justify-end">
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove();
+          }}
+          className="w-9 h-9 rounded-xl bg-[#F5F7FA] flex items-center justify-center"
+          aria-label={`Remove ${asset.name}`}
+        >
+          <X className="w-4 h-4 text-gray-500" />
+        </button>
+      </div>
+    </Card>
+  );
+}
+
+type PortfolioDetailPanelProps = {
+  portfolio: UserPortfolio;
+  companySearch: string;
+  showPicker: boolean;
+  filteredPickable: InvestioAsset[];
+  deleteDialogOpen: boolean;
+  onBack: () => void;
+  onDeleteDialogChange: (open: boolean) => void;
+  onConfirmDelete: () => void;
+  onTogglePicker: () => void;
+  onSearchChange: (value: string) => void;
+  onAddCompany: (asset: InvestioAsset) => void;
+  onRemoveCompany: (assetId: string) => void;
+  navigate: ReturnType<typeof useNavigate>;
+};
+
+function PortfolioDetailPanel({
+  portfolio,
+  companySearch,
+  showPicker,
+  filteredPickable,
+  deleteDialogOpen,
+  onBack,
+  onDeleteDialogChange,
+  onConfirmDelete,
+  onTogglePicker,
+  onSearchChange,
+  onAddCompany,
+  onRemoveCompany,
+  navigate,
+}: PortfolioDetailPanelProps) {
+  const holdingIds = useMemo(
+    () => new Set(portfolio.holdings.map((item) => item.id)),
+    [portfolio.holdings],
+  );
+  const assetIds = useMemo(
+    () => portfolio.holdings.map((item) => item.id),
+    [portfolio.holdings],
+  );
+  const { quotes, loading: quotesLoading, error: quotesError } =
+    usePortfolioQuotes(assetIds);
+
+  const totalValue = portfolio.config?.amount ?? 25_000;
+  const performance = useMemo(
+    () => computePortfolioPerformance(portfolio.holdings, quotes, totalValue),
+    [portfolio.holdings, quotes, totalValue],
+  );
+
+  return (
+    <>
+      <div className="bg-white px-6 screen-header pb-6 rounded-b-3xl shadow-sm mb-6">
+        <button
+          onClick={onBack}
+          className="mb-6 w-10 h-10 bg-[#F5F7FA] rounded-2xl flex items-center justify-center"
+        >
+          <ArrowLeft className="w-5 h-5 text-[#0A1F44]" />
+        </button>
+
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-bold text-[#0A1F44]">{portfolio.name}</h1>
+            <p className="text-gray-600 mt-2">
+              {portfolio.holdings.length}{" "}
+              {portfolio.holdings.length === 1 ? "company" : "companies"}
+              {portfolio.config?.risk ? ` · ${portfolio.config.risk} risk` : ""}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => onDeleteDialogChange(true)}
+            className="w-10 h-10 rounded-2xl bg-[#E03A3E]/10 flex items-center justify-center shrink-0"
+            aria-label="Delete portfolio"
+          >
+            <Trash2 className="w-4 h-4 text-[#E03A3E]" />
+          </button>
+        </div>
+      </div>
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={onDeleteDialogChange}>
+        <AlertDialogContent className="rounded-3xl border-0 max-w-[340px]">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-[#0A1F44]">
+              Delete portfolio?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-gray-600 leading-relaxed">
+              You are about to delete{" "}
+              <span className="font-semibold text-[#0A1F44]">{portfolio.name}</span>
+              . This removes all {portfolio.holdings.length}{" "}
+              {portfolio.holdings.length === 1 ? "company" : "companies"} from
+              this portfolio. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-col-reverse sm:flex-col-reverse gap-2">
+            <AlertDialogCancel className="rounded-2xl h-11 border-gray-200">
+              Keep portfolio
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="rounded-2xl h-11 bg-[#E03A3E] hover:bg-[#E03A3E]/90"
+              onClick={onConfirmDelete}
+            >
+              Yes, delete portfolio
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <div className="px-6 space-y-4 pb-8">
+        {portfolio.holdings.length > 0 && (
+          <PortfolioSummaryCard performance={performance} loading={quotesLoading} />
+        )}
+
+        {quotesError && (
+          <p className="text-xs text-[#E03A3E] bg-[#E03A3E]/10 rounded-xl px-3 py-2">
+            {quotesError}
+          </p>
+        )}
+
+        <Button
+          onClick={onTogglePicker}
+          variant="outline"
+          className="w-full h-12 rounded-2xl border-2 border-[#0A1F44] text-[#0A1F44]"
+        >
+          <Plus className="w-4 h-4 mr-2" />
+          {showPicker ? "Hide company list" : "Add companies"}
+        </Button>
+
+        {showPicker && (
+          <Card className="p-4 rounded-3xl shadow-sm border-0">
+            <div className="relative mb-3">
+              <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <Input
+                value={companySearch}
+                onChange={(e) => onSearchChange(e.target.value)}
+                placeholder="Search companies..."
+                className="h-11 pl-9 rounded-2xl bg-[#F5F7FA] border-0"
+              />
+            </div>
+            <div className="max-h-56 overflow-y-auto scrollbar-hide space-y-2">
+              {filteredPickable.map((asset) => {
+                const alreadyAdded = holdingIds.has(asset.id);
+                return (
+                  <button
+                    key={asset.id}
+                    type="button"
+                    disabled={alreadyAdded}
+                    onClick={() => onAddCompany(asset)}
+                    className={`w-full flex items-center justify-between p-3 rounded-2xl text-left transition-colors ${
+                      alreadyAdded
+                        ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                        : "bg-[#F5F7FA] hover:bg-[#0A1F44]/5"
+                    }`}
+                  >
+                    <div>
+                      <p className="font-medium text-[#0A1F44] text-sm">
+                        {asset.name}
+                      </p>
+                      <p className="text-xs text-gray-500">{asset.ticker}</p>
+                    </div>
+                    <span className="text-xs font-medium">
+                      {alreadyAdded ? "Added" : "Add"}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </Card>
+        )}
+
+        {portfolio.holdings.length === 0 ? (
+          <Card className="p-6 rounded-3xl shadow-sm border-0 text-center">
+            <p className="text-gray-600 text-sm">
+              No companies yet. Tap &quot;Add companies&quot; to build this portfolio.
+            </p>
+          </Card>
+        ) : (
+          <>
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 px-1">
+              Holdings performance
+            </p>
+            {portfolio.holdings.map((asset) => (
+              <HoldingRow
+                key={asset.id}
+                asset={asset}
+                quote={quotes[asset.id]}
+                perHoldingValue={performance.perHoldingValue}
+                onRemove={() => onRemoveCompany(asset.id)}
+                onOpen={() => navigate(`/stock/${asset.id}`)}
+              />
+            ))}
+          </>
+        )}
+      </div>
+    </>
+  );
 }
 
 export function PortfolioBuilderScreen() {
@@ -335,163 +719,31 @@ export function PortfolioBuilderScreen() {
       return null;
     }
 
-    const holdingIds = new Set(selectedPortfolio.holdings.map((item) => item.id));
-
     return (
-      <>
-        <div className="bg-white px-6 screen-header pb-6 rounded-b-3xl shadow-sm mb-6">
-          <button
-            onClick={() => {
-              setShowPicker(false);
-              setView("list");
-            }}
-            className="mb-6 w-10 h-10 bg-[#F5F7FA] rounded-2xl flex items-center justify-center"
-          >
-            <ArrowLeft className="w-5 h-5 text-[#0A1F44]" />
-          </button>
-
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <h1 className="text-2xl font-bold text-[#0A1F44]">
-                {selectedPortfolio.name}
-              </h1>
-              <p className="text-gray-600 mt-2">
-                {selectedPortfolio.holdings.length} companies in this portfolio
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setDeleteDialogOpen(true)}
-              className="w-10 h-10 rounded-2xl bg-[#E03A3E]/10 flex items-center justify-center shrink-0"
-              aria-label="Delete portfolio"
-            >
-              <Trash2 className="w-4 h-4 text-[#E03A3E]" />
-            </button>
-          </div>
-        </div>
-
-        <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-          <AlertDialogContent className="rounded-3xl border-0 max-w-[340px]">
-            <AlertDialogHeader>
-              <AlertDialogTitle className="text-[#0A1F44]">
-                Delete portfolio?
-              </AlertDialogTitle>
-              <AlertDialogDescription className="text-gray-600 leading-relaxed">
-                You are about to delete{" "}
-                <span className="font-semibold text-[#0A1F44]">
-                  {selectedPortfolio.name}
-                </span>
-                . This removes all {selectedPortfolio.holdings.length}{" "}
-                {selectedPortfolio.holdings.length === 1 ? "company" : "companies"}{" "}
-                from this portfolio. This action cannot be undone.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter className="flex-col-reverse sm:flex-col-reverse gap-2">
-              <AlertDialogCancel className="rounded-2xl h-11 border-gray-200">
-                Keep portfolio
-              </AlertDialogCancel>
-              <AlertDialogAction
-                className="rounded-2xl h-11 bg-[#E03A3E] hover:bg-[#E03A3E]/90"
-                onClick={() => {
-                  deletePortfolio(selectedPortfolio.id);
-                  setDeleteDialogOpen(false);
-                  setView("list");
-                }}
-              >
-                Yes, delete portfolio
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-
-        <div className="px-6 space-y-4 pb-8">
-          <Button
-            onClick={() => setShowPicker((open) => !open)}
-            variant="outline"
-            className="w-full h-12 rounded-2xl border-2 border-[#0A1F44] text-[#0A1F44]"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            {showPicker ? "Hide company list" : "Add companies"}
-          </Button>
-
-          {showPicker && (
-            <Card className="p-4 rounded-3xl shadow-sm border-0">
-              <div className="relative mb-3">
-                <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <Input
-                  value={companySearch}
-                  onChange={(e) => setCompanySearch(e.target.value)}
-                  placeholder="Search companies..."
-                  className="h-11 pl-9 rounded-2xl bg-[#F5F7FA] border-0"
-                />
-              </div>
-              <div className="max-h-56 overflow-y-auto scrollbar-hide space-y-2">
-                {filteredPickable.map((asset) => {
-                  const alreadyAdded = holdingIds.has(asset.id);
-                  return (
-                    <button
-                      key={asset.id}
-                      type="button"
-                      disabled={alreadyAdded}
-                      onClick={() => handleAddCompany(asset)}
-                      className={`w-full flex items-center justify-between p-3 rounded-2xl text-left transition-colors ${
-                        alreadyAdded
-                          ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                          : "bg-[#F5F7FA] hover:bg-[#0A1F44]/5"
-                      }`}
-                    >
-                      <div>
-                        <p className="font-medium text-[#0A1F44] text-sm">
-                          {asset.name}
-                        </p>
-                        <p className="text-xs text-gray-500">{asset.ticker}</p>
-                      </div>
-                      <span className="text-xs font-medium">
-                        {alreadyAdded ? "Added" : "Add"}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </Card>
-          )}
-
-          {selectedPortfolio.holdings.length === 0 ? (
-            <Card className="p-6 rounded-3xl shadow-sm border-0 text-center">
-              <p className="text-gray-600 text-sm">
-                No companies yet. Tap &quot;Add companies&quot; to build this portfolio.
-              </p>
-            </Card>
-          ) : (
-            selectedPortfolio.holdings.map((asset) => (
-              <Card
-                key={asset.id}
-                className="p-4 rounded-2xl shadow-sm border-0"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h3 className="font-bold text-[#0A1F44]">{asset.name}</h3>
-                    <p className="text-sm text-gray-500">{asset.ticker}</p>
-                    <p className="text-xs text-gray-400 mt-1 line-clamp-2">
-                      {asset.description}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      removeFromPortfolio(asset.id, selectedPortfolio.id)
-                    }
-                    className="w-9 h-9 rounded-xl bg-[#F5F7FA] flex items-center justify-center shrink-0"
-                    aria-label={`Remove ${asset.name}`}
-                  >
-                    <X className="w-4 h-4 text-gray-500" />
-                  </button>
-                </div>
-              </Card>
-            ))
-          )}
-        </div>
-      </>
+      <PortfolioDetailPanel
+        portfolio={selectedPortfolio}
+        companySearch={companySearch}
+        showPicker={showPicker}
+        filteredPickable={filteredPickable}
+        deleteDialogOpen={deleteDialogOpen}
+        onBack={() => {
+          setShowPicker(false);
+          setView("list");
+        }}
+        onDeleteDialogChange={setDeleteDialogOpen}
+        onConfirmDelete={() => {
+          deletePortfolio(selectedPortfolio.id);
+          setDeleteDialogOpen(false);
+          setView("list");
+        }}
+        onTogglePicker={() => setShowPicker((open) => !open)}
+        onSearchChange={setCompanySearch}
+        onAddCompany={handleAddCompany}
+        onRemoveCompany={(assetId) =>
+          removeFromPortfolio(assetId, selectedPortfolio.id)
+        }
+        navigate={navigate}
+      />
     );
   };
 
