@@ -1167,6 +1167,12 @@ def chat_ollama_sync(message: str) -> ChatResponse:
 
 # ─── Endpoints ────────────────────────────────────────────────────────────────
 
+@app.get("/")
+@app.get("/health")
+async def root_health():
+    return {"status": "ok"}
+
+
 @app.get("/api/health")
 async def health():
     if ENVIRONMENT == "production":

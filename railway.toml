@@ -1,11 +1,3 @@
 # Point the Investio Railway service at the FastAPI backend (not the Vite frontend).
-# In Railway dashboard: Service → Settings → set Root Directory to "server" if not auto-detected.
-
-[build]
-builder = "nixpacks"
-
-[deploy]
-startCommand = "uvicorn main:app --host 0.0.0.0 --port $PORT"
-restartPolicyType = "on_failure"
-healthcheckPath = "/api/health"
-healthcheckTimeout = 300
+# In Railway dashboard: Service → Settings → set Root Directory to "server".
+# Deploy config for the API lives in server/railway.toml (read when root dir is server/).
