@@ -393,8 +393,14 @@ Verify `OLLAMA_API_KEY` and `OLLAMA_MODEL` on Railway. Check `/api/health` → `
 ### Google OAuth stuck or wrong redirect
 
 - Start sign-in from `/auth` in the **same browser tab**.
-- Confirm redirect URLs in Supabase match your environment.
-- Re-run **Sync OAuth Providers to Supabase** workflow.
+- Use **https://investio-wheat.vercel.app/auth** for production OAuth — not a Vercel preview URL unless you added that preview to Supabase redirects.
+- Supabase **Site URL** should be `https://investio-wheat.vercel.app` (not `localhost`). Localhost stays in the redirect allow list only.
+- If you see `flow_state_already_used` or land on `localhost:5173` after Google sign-in: run `npm run dev` only when testing locally; otherwise use the production URL and re-run **Sync OAuth Providers to Supabase**.
+- Re-run **Sync OAuth Providers to Supabase** after changing auth URLs.
+
+### Google shows “Continue to supabase.co”
+
+Normal unless you configure a Supabase custom auth domain. Set app name and logo in **Google Cloud Console** → OAuth consent screen for “Investio” branding.
 
 ### Password reset email link fails
 
