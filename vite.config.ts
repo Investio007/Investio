@@ -48,6 +48,8 @@ export default defineConfig({
           'vendor-react':    ['react', 'react-dom', 'react-router'],
           'vendor-charts':   ['recharts'],
           'vendor-supabase': ['@supabase/supabase-js'],
+          'vendor-sentry':   ['@sentry/react'],
+          'vendor-posthog':  ['posthog-js'],
           'vendor-ui':       ['lucide-react'],
         }
       }
