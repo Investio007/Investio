@@ -1,42 +1,25 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
-import { TrendingUp } from "lucide-react";
+import { AuthPageLayout } from "../components/AuthPageLayout";
 import { isSupabaseConfigured, supabase } from "../../lib/supabase";
-
-function getAuthErrorFromUrl() {
-  const query = new URLSearchParams(window.location.search);
-  const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
-  return (
-    query.get("error_description") ??
-    hash.get("error_description") ??
-    query.get("error") ??
-    hash.get("error")
-  );
-}
-
-function friendlyAuthError(message: string) {
-  if (/code verifier not found/i.test(message)) {
-    return "Sign-in opened in a different browser than where you started. Open http://localhost:5173/auth in Chrome (not the IDE preview), clear site data for localhost, then try again.";
-  }
-  if (/invalid flow state|no valid flow state/i.test(message)) {
-    return "Sign-in session expired or was interrupted. Go back to sign in and try Google again in the same Chrome tab.";
-  }
-  return message;
-}
+import {
+  establishSessionFromUrl,
+  friendlyAuthError,
+  getAuthErrorFromUrl,
+  hasPendingPasswordRecovery,
+  isCodeVerifierError,
+  isPasswordRecoveryFromUrl,
+} from "../lib/authSessionFromUrl";
 
 export function AuthCallbackScreen() {
   const navigate = useNavigate();
   const [error, setError] = useState("");
-  const handledRef = useRef(false);
 
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) {
       navigate("/auth", { replace: true });
       return;
     }
-
-    if (handledRef.current) return;
-    handledRef.current = true;
 
     const client = supabase;
     const authError = getAuthErrorFromUrl();
@@ -45,21 +28,41 @@ export function AuthCallbackScreen() {
       return;
     }
 
+    if (isPasswordRecoveryFromUrl()) {
+      const suffix = `${window.location.search}${window.location.hash}`;
+      navigate(`/auth/reset-password${suffix}`, { replace: true });
+      return;
+    }
+
     let mounted = true;
-    let finished = false;
 
-    const complete = (session: { user: { email?: string | null } } | null, message?: string) => {
-      if (!mounted || finished) return;
+    const run = async () => {
+      const { session, error: sessionError } = await establishSessionFromUrl(client);
+      if (!mounted) return;
 
-      if (message) {
-        finished = true;
-        setError(friendlyAuthError(message));
+      if (sessionError && isCodeVerifierError(sessionError)) {
+        if (hasPendingPasswordRecovery()) {
+          const suffix = `${window.location.search}${window.location.hash}`;
+          navigate(`/auth/reset-password${suffix}`, { replace: true });
+          return;
+        }
+        setError(friendlyAuthError(sessionError));
         return;
       }
 
-      if (!session) return;
+      if (sessionError) {
+        setError(friendlyAuthError(sessionError));
+        return;
+      }
 
-      finished = true;
+      if (!session) {
+        setError(
+          friendlyAuthError(
+            "Sign in timed out. Clear localhost site data and try again in the same browser tab.",
+          ),
+        );
+        return;
+      }
 
       if (session.user.email) {
         localStorage.setItem(
@@ -69,75 +72,40 @@ export function AuthCallbackScreen() {
       }
 
       window.history.replaceState({}, document.title, "/auth/callback");
+
+      if (isPasswordRecoveryFromUrl() || hasPendingPasswordRecovery()) {
+        navigate("/auth/reset-password", { replace: true });
+        return;
+      }
+
       navigate("/home", { replace: true });
     };
 
-    // detectSessionInUrl exchanges the PKCE code once when this page loads.
-    client.auth.getSession().then(({ data: { session }, error: sessionError }) => {
-      if (session) {
-        complete(session);
-        return;
-      }
-      if (sessionError) {
-        complete(null, sessionError.message);
-      }
-    });
-
-    const {
-      data: { subscription },
-    } = client.auth.onAuthStateChange((event, session) => {
-      if (event === "SIGNED_IN" && session) {
-        complete(session);
-      }
-    });
-
-    const timeout = window.setTimeout(async () => {
-      if (finished || !mounted) return;
-
-      const {
-        data: { session },
-        error: sessionError,
-      } = await client.auth.getSession();
-
-      if (session) {
-        complete(session);
-        return;
-      }
-
-      complete(
-        null,
-        sessionError?.message ??
-          "Sign in was cancelled or failed. Use the same Chrome tab you started from.",
-      );
-    }, 8000);
+    void run();
 
     return () => {
       mounted = false;
-      subscription.unsubscribe();
-      window.clearTimeout(timeout);
     };
   }, [navigate]);
 
   return (
-    <div className="min-h-full bg-white flex flex-col items-center justify-center px-8">
-      <div className="w-12 h-12 bg-[#0A1F44] rounded-2xl flex items-center justify-center mb-6">
-        <TrendingUp className="w-7 h-7 text-white" />
-      </div>
-
+    <AuthPageLayout>
       {error ? (
-        <div className="text-center max-w-sm">
-          <p className="text-[#E03A3E] text-sm mb-4">{error}</p>
+        <div className="text-center w-full">
+          <p className="text-[#E03A3E] text-sm sm:text-base mb-4">{error}</p>
           <button
             type="button"
             onClick={() => navigate("/auth", { replace: true })}
-            className="text-[#0A1F44] font-medium"
+            className="touch-target text-[#0A1F44] font-medium text-sm sm:text-base"
           >
             Back to sign in
           </button>
         </div>
       ) : (
-        <p className="text-gray-600 text-sm">Completing sign in...</p>
+        <p className="text-gray-600 text-sm sm:text-base text-center">
+          Completing sign in...
+        </p>
       )}
-    </div>
+    </AuthPageLayout>
   );
 }

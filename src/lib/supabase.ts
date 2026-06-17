@@ -33,3 +33,12 @@ export function getAuthRedirectUrl() {
   if (configured) return configured;
   return `${window.location.origin}/auth/callback`;
 }
+
+export function getPasswordResetRedirectUrl() {
+  if (typeof window === "undefined") return undefined;
+  const configured = (
+    import.meta.env.VITE_AUTH_RESET_REDIRECT_URL as string | undefined
+  )?.trim();
+  if (configured) return configured;
+  return `${window.location.origin}/auth/reset-password`;
+}

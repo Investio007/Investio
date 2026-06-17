@@ -54,7 +54,7 @@ export function SocialAuthButtons({
         variant="outline"
         disabled={isBusy}
         onClick={onGoogleClick}
-        className="w-full h-14 rounded-2xl bg-white border-gray-200 text-[#0A1F44] hover:bg-[#F5F7FA] text-base font-medium"
+        className="w-full h-12 sm:h-14 rounded-2xl bg-white border-gray-200 text-[#0A1F44] hover:bg-[#F5F7FA] text-sm sm:text-base font-medium"
       >
         <GoogleIcon />
         {loadingProvider === "google" ? "Connecting..." : "Continue with Google"}

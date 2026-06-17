@@ -1,0 +1,3 @@
+# Railway / Nixpacks — run FastAPI from the server/ directory
+[start]
+cmd = "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"
