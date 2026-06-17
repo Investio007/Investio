@@ -2,7 +2,7 @@ import type { User } from "@supabase/supabase-js";
 import type { InvestioAsset } from "../data/assets";
 import type { PortfoliosStore } from "../types/portfolio";
 import { migrateLegacyPortfolio } from "../types/portfolio";
-import { getAuthRedirectUrl, isSupabaseConfigured, supabase } from "../../lib/supabase";
+import { getAuthRedirectUrl, getPasswordResetRedirectUrl, isSupabaseConfigured, supabase } from "../../lib/supabase";
 
 export type PortfolioConfig = {
   amount: number;
@@ -162,4 +162,17 @@ export async function signInWithOAuth(provider: OAuthProvider) {
 export async function signOutUser() {
   const client = requireClient();
   return client.auth.signOut();
+}
+
+export async function requestPasswordReset(email: string) {
+  const client = requireClient();
+  const redirectTo = getPasswordResetRedirectUrl();
+  return client.auth.resetPasswordForEmail(email.trim(), {
+    redirectTo,
+  });
+}
+
+export async function updatePassword(newPassword: string) {
+  const client = requireClient();
+  return client.auth.updateUser({ password: newPassword });
 }

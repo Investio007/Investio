@@ -335,3 +335,64 @@ export function useCompare() {
 
   return { companies, verdict, updatedAt, stale, loading, error };
 }
+
+export function usePortfolioQuotes(assetIds: string[]) {
+  const [quotes, setQuotes] = useState<Record<string, QuoteData>>({});
+  const [loading, setLoading] = useState(assetIds.length > 0);
+  const [error, setError] = useState<string | null>(null);
+
+  const idsKey = assetIds.slice().sort().join(",");
+
+  useEffect(() => {
+    const ids = idsKey ? idsKey.split(",") : [];
+
+    if (ids.length === 0) {
+      setQuotes({});
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    const load = async () => {
+      setLoading(true);
+      setError(null);
+
+      const results = await Promise.allSettled(
+        ids.map((id) => marketApi.getQuote(id)),
+      );
+
+      if (cancelled) return;
+
+      const next: Record<string, QuoteData> = {};
+      let failures = 0;
+
+      results.forEach((result, index) => {
+        if (result.status === "fulfilled") {
+          next[ids[index]] = result.value;
+        } else {
+          failures++;
+        }
+      });
+
+      setQuotes(next);
+      setError(
+        failures === ids.length
+          ? "Live prices unavailable. Check that the market API is running."
+          : null,
+      );
+      setLoading(false);
+    };
+
+    void load();
+    const interval = setInterval(load, 60_000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [idsKey]);
+
+  return { quotes, loading, error };
+}
