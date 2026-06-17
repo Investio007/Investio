@@ -188,6 +188,8 @@ Copy `.env.example` to `.env` in the project root and fill in keys.
 | `VITE_MARKET_API_URL` | Local prod builds | `http://localhost:8002` — omit on Vercel (use proxy) |
 | `VITE_AUTH_REDIRECT_URL` | Optional | Custom OAuth callback (Capacitor / custom domain) |
 | `VITE_AUTH_RESET_REDIRECT_URL` | Optional | Custom password-reset redirect |
+| `VITE_SENTRY_DSN` | Production | Sentry React DSN for error monitoring |
+| `VITE_SENTRY_ENVIRONMENT` | Optional | e.g. `production`, `preview` |
 
 #### Backend (`.env` or Railway env — **never** use `VITE_*` for secrets)
 
@@ -245,6 +247,7 @@ Vite proxies `/api/*` to port **8002** in development.
 2. Set environment variables:
    - `VITE_SUPABASE_URL`
    - `VITE_SUPABASE_ANON_KEY`
+   - `VITE_SENTRY_DSN` — optional, recommended for production error monitoring
    - `VITE_MARKET_API_URL` — **optional** (recommended: leave unset and use `vercel.json` proxy)
 3. Deploy from `main`. `vercel.json` handles:
    - `/api/:path*` → Railway backend
@@ -321,6 +324,28 @@ See **[TESTING.md](TESTING.md)** for the full pre-release checklist (auth, respo
 
 ---
 
+## Error monitoring (Sentry)
+
+Investio uses **@sentry/react** for production error tracking, performance traces, and session replay on errors.
+
+### Setup
+
+1. Create a **React** project in [Sentry](https://sentry.io).
+2. Add to **Vercel** → Environment Variables (Production):
+   - `VITE_SENTRY_DSN` — your Sentry DSN (public; safe in frontend)
+   - `VITE_SENTRY_ENVIRONMENT` — `production` (optional)
+3. Redeploy Vercel after adding env vars.
+
+Sentry initializes in `src/lib/sentry.ts` only when `VITE_SENTRY_DSN` is set. No DSN → no overhead in local dev.
+
+### Verify
+
+After deploy, check **Sentry → Issues** after using the app or Sentry’s test error button.
+
+Optional later: add a **FastAPI** Sentry project for the Railway backend (`sentry-sdk`).
+
+---
+
 ## CI/CD
 
 | Workflow | Triggers | Checks |
@@ -343,6 +368,7 @@ Branch protection on `main` requires CI to pass before merge.
 - CORS restricted in production via `CORS_ORIGINS`
 - AI endpoint IP rate limiting
 - Demo auth bypass disabled in production builds
+- Sentry error boundary + optional `VITE_SENTRY_DSN` monitoring
 
 **Recommended hardening (not yet implemented)**
 - API-wide rate limits on public market endpoints
