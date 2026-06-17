@@ -94,8 +94,8 @@ flowchart LR
 
 **How market data reaches production**
 
-1. **Recommended:** Leave `VITE_MARKET_API_URL` unset on Vercel. The app calls same-origin `/api/*`; `vercel.json` proxies to Railway.
-2. **Alternative:** Set `VITE_MARKET_API_URL` to your Railway URL **without a trailing slash** (e.g. `https://investio-production.up.railway.app`). The app normalizes trailing slashes, but omitting them avoids confusion.
+1. **Recommended:** Leave `VITE_MARKET_API_URL` unset on Vercel. The app calls same-origin `/api/*`; `vercel.json` proxies to Railway on **production and preview** `*.vercel.app` URLs.
+2. **Alternative:** Set `VITE_MARKET_API_URL` only for non-Vercel hosting (not preview deployments — Railway CORS blocks `*.vercel.app`).
 
 ---
 
@@ -185,7 +185,7 @@ Copy `.env.example` to `.env` in the project root and fill in keys.
 |----------|----------|---------|
 | `VITE_SUPABASE_URL` | For auth/sync | Supabase project URL |
 | `VITE_SUPABASE_ANON_KEY` | For auth/sync | Supabase anon (public) key |
-| `VITE_MARKET_API_URL` | Local prod builds | `http://localhost:8002` — omit on Vercel (use proxy) |
+| `VITE_MARKET_API_URL` | Local prod builds | `http://localhost:8002` — **omit on Vercel** (use `vercel.json` proxy; required for preview URLs) |
 | `VITE_AUTH_REDIRECT_URL` | Optional | Custom OAuth callback (Capacitor / custom domain) |
 | `VITE_AUTH_RESET_REDIRECT_URL` | Optional | Custom password-reset redirect |
 | `VITE_SENTRY_DSN` | Production | Sentry React DSN for error monitoring |
