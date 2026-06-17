@@ -39,13 +39,17 @@ const supabaseCallback = `https://${PROJECT_REF}.supabase.co/auth/v1/callback`;
 const redirectUrls = [
   ...AUTH_PATHS.map((path) => `${SITE_URL}${path}`),
   ...AUTH_PATHS.map((path) => `${PRODUCTION_SITE_URL}${path}`),
+  // Vercel preview deployments (PR branches)
+  "https://investio-*-investio007s-projects.vercel.app/auth/callback",
+  "https://investio-*-investio007s-projects.vercel.app/auth/reset-password",
   ...EXTRA_REDIRECTS.split(",").map((u) => u.trim()).filter(Boolean),
 ];
 const uriAllowList = [...new Set(redirectUrls)].join(",");
 
 /** @type {Record<string, unknown>} */
 const payload = {
-  site_url: SITE_URL,
+  // Production is the default post-auth landing; localhost stays in uri_allow_list only.
+  site_url: PRODUCTION_SITE_URL,
   uri_allow_list: uriAllowList,
 };
 

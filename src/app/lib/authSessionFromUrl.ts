@@ -79,6 +79,13 @@ export async function establishSessionFromUrl(
 
   const code = search.get("code");
   if (code) {
+    // detectSessionInUrl may have already exchanged the PKCE code — avoid double exchange.
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    const { data: existing } = await client.auth.getSession();
+    if (existing.session) {
+      return { session: existing.session, error: null };
+    }
+
     const { data, error } = await client.auth.exchangeCodeForSession(code);
     if (data.session) {
       return { session: data.session, error: null };
@@ -107,11 +114,11 @@ export function friendlyAuthError(message: string): string {
     }
     return "Sign-in opened in a different browser than where you started. Open http://localhost:5173/auth in Chrome, clear site data for localhost, then try Google sign-in again in the same tab.";
   }
-  if (/invalid flow state|no valid flow state/i.test(message)) {
-    return "Sign-in session expired or was interrupted. Go back to sign in and try again in the same browser tab.";
+  if (/invalid flow state|no valid flow state|flow_state_already_used|already been used/i.test(message)) {
+    return "Sign-in session expired or was already used. Go back to sign in and try again in the same browser tab (do not refresh the callback page).";
   }
   if (/no oauth code/i.test(message)) {
-    return "No sign-in code in the URL. Add http://localhost:5173/auth/callback to Supabase redirect URLs, then start again from /auth.";
+    return "No sign-in code in the URL. Start again from /auth in the same browser tab.";
   }
   return message;
 }

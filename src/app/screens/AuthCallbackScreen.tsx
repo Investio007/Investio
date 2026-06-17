@@ -22,21 +22,30 @@ export function AuthCallbackScreen() {
     }
 
     const client = supabase;
-    const authError = getAuthErrorFromUrl();
-    if (authError) {
-      setError(friendlyAuthError(authError));
-      return;
-    }
-
-    if (isPasswordRecoveryFromUrl()) {
-      const suffix = `${window.location.search}${window.location.hash}`;
-      navigate(`/auth/reset-password${suffix}`, { replace: true });
-      return;
-    }
-
     let mounted = true;
 
     const run = async () => {
+      const authError = getAuthErrorFromUrl();
+      if (authError) {
+        if (/flow_state_already_used|already been used/i.test(authError)) {
+          const { data } = await client.auth.getSession();
+          if (!mounted) return;
+          if (data.session) {
+            window.history.replaceState({}, document.title, "/auth/callback");
+            navigate("/home", { replace: true });
+            return;
+          }
+        }
+        setError(friendlyAuthError(authError));
+        return;
+      }
+
+      if (isPasswordRecoveryFromUrl()) {
+        const suffix = `${window.location.search}${window.location.hash}`;
+        navigate(`/auth/reset-password${suffix}`, { replace: true });
+        return;
+      }
+
       const { session, error: sessionError } = await establishSessionFromUrl(client);
       if (!mounted) return;
 
@@ -58,7 +67,7 @@ export function AuthCallbackScreen() {
       if (!session) {
         setError(
           friendlyAuthError(
-            "Sign in timed out. Clear localhost site data and try again in the same browser tab.",
+            "Sign in timed out. Clear site data for this app and try again in the same browser tab.",
           ),
         );
         return;
