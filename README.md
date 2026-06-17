@@ -262,6 +262,7 @@ Vite proxies `/api/*` to port **8002** in development.
 1. Create a service from the repo; set **Root Directory** to `server`.
 2. Set environment variables: `FINNHUB_API_KEY`, `OLLAMA_API_KEY`, `OLLAMA_MODEL`, `ENVIRONMENT=production`, `CORS_ORIGINS=https://investio-wheat.vercel.app`.
 3. Railway uses `railway.toml` / `Procfile`: `uvicorn main:app --host 0.0.0.0 --port $PORT`.
+4. Health check path must be **`/api/health`** (configured in `railway.toml` — `/` returns 404 on FastAPI).
 4. Verify: `https://<your-service>.up.railway.app/api/health` returns `"status":"ok"`.
 
 Update `vercel.json` if your Railway URL changes.
