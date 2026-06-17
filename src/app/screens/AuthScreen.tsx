@@ -14,6 +14,7 @@ import {
   type OAuthProvider,
 } from "../services/supabaseDb";
 import { isSupabaseConfigured } from "../../lib/supabase";
+import { MIN_PASSWORD_LENGTH } from "../lib/authConstants";
 
 export function AuthScreen() {
   const [isLogin, setIsLogin] = useState(false);
@@ -28,7 +29,7 @@ export function AuthScreen() {
     setError("");
 
     if (!isSupabaseConfigured) {
-      setError("Connect Supabase in .env to use Google sign in.");
+      setError("Connect Supabase in .env to use social sign in.");
       return;
     }
 
@@ -54,8 +55,8 @@ export function AuthScreen() {
       setError("Please fill in all fields.");
       return;
     }
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters.");
+    if (!isLogin && password.length < MIN_PASSWORD_LENGTH) {
+      setError(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
       return;
     }
 
@@ -139,8 +140,9 @@ export function AuthScreen() {
 
       <SocialAuthButtons
         disabled={loading}
-        loadingProvider={oauthLoading === "google" ? "google" : null}
+        loadingProvider={oauthLoading}
         onGoogleClick={() => handleOAuth("google")}
+        onAppleClick={() => handleOAuth("apple")}
       />
 
       <div className="relative my-6 sm:my-8">
