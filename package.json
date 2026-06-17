@@ -7,6 +7,8 @@
     "build": "vite build",
     "build:android": "npm run build && npx cap sync android",
     "typecheck": "tsc --noEmit",
+    "qa:smoke": "node scripts/qa-smoke.mjs",
+    "qa": "npm run typecheck && npm run build && npm run qa:smoke",
     "sync:oauth": "node scripts/sync-oauth-to-supabase.mjs",
     "generate:apple-secret": "node scripts/generate-apple-client-secret.mjs",
     "dev": "vite",

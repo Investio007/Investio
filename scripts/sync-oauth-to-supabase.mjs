@@ -14,7 +14,10 @@ const PROJECT_REF =
   extractProjectRef(process.env.VITE_SUPABASE_URL);
 
 const SITE_URL = process.env.AUTH_SITE_URL?.trim() || "http://localhost:5173";
+const PRODUCTION_SITE_URL =
+  process.env.AUTH_PRODUCTION_SITE_URL?.trim() || "https://investio-wheat.vercel.app";
 const EXTRA_REDIRECTS = process.env.AUTH_REDIRECT_URLS?.trim() || "";
+const AUTH_PATHS = ["/auth/callback", "/auth/reset-password"];
 
 function extractProjectRef(url) {
   if (!url) return "";
@@ -34,7 +37,8 @@ requireEnv("SUPABASE_PROJECT_REF", PROJECT_REF);
 
 const supabaseCallback = `https://${PROJECT_REF}.supabase.co/auth/v1/callback`;
 const redirectUrls = [
-  `${SITE_URL}/auth/callback`,
+  ...AUTH_PATHS.map((path) => `${SITE_URL}${path}`),
+  ...AUTH_PATHS.map((path) => `${PRODUCTION_SITE_URL}${path}`),
   ...EXTRA_REDIRECTS.split(",").map((u) => u.trim()).filter(Boolean),
 ];
 const uriAllowList = [...new Set(redirectUrls)].join(",");
