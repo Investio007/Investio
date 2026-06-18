@@ -11,21 +11,44 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install PostgreSQL client
-        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
 
       - name: Dump Supabase database
         env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
-          if [ -z "$SUPABASE_DB_URL" ]; then
-            echo "SUPABASE_DB_URL secret not set — add it in GitHub → Settings → Secrets"
-            exit 1
-          fi
           mkdir -p backups
           stamp=$(date -u +%Y%m%d)
-          pg_dump "$SUPABASE_DB_URL" --no-owner --no-acl -f "backups/investio-${stamp}.sql"
-          echo "Backup size: $(wc -c < backups/investio-${stamp}.sql) bytes"
+          outfile="backups/investio-${stamp}.sql"
+
+          if [ -n "$SUPABASE_DB_PASSWORD" ] && [ -n "$SUPABASE_PROJECT_REF" ] && [ -n "$SUPABASE_ACCESS_TOKEN" ]; then
+            echo "Using Supabase CLI (IPv4 pooler fallback)..."
+            supabase db dump \
+              --project-ref "$SUPABASE_PROJECT_REF" \
+              --password "$SUPABASE_DB_PASSWORD" \
+              -f "$outfile"
+          elif [ -n "$SUPABASE_DB_URL" ]; then
+            if echo "$SUPABASE_DB_URL" | grep -q '@db\.'; then
+              echo "SUPABASE_DB_URL uses direct host db.*.supabase.co (IPv6)."
+              echo "GitHub Actions cannot reach it. Use one of:"
+              echo "  1. Add SUPABASE_DB_PASSWORD secret (recommended) — CLI uses IPv4 pooler"
+              echo "  2. Update SUPABASE_DB_URL to session pooler URI (*.pooler.supabase.com:5432)"
+              exit 1
+            fi
+            echo "Using pg_dump with pooler URL..."
+            sudo apt-get update && sudo apt-get install -y postgresql-client
+            pg_dump "$SUPABASE_DB_URL" --no-owner --no-acl -f "$outfile"
+          else
+            echo "Set SUPABASE_DB_PASSWORD (recommended) or SUPABASE_DB_URL (session pooler only)."
+            exit 1
+          fi
+
+          echo "Backup size: $(wc -c < "$outfile") bytes"
 
       - uses: actions/upload-artifact@v4
         with:
