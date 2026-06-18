@@ -11,40 +11,44 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: supabase/setup-cli@v1
-        with:
-          version: latest
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
 
       - name: Dump Supabase database
         env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          # West EU (Ireland) — change if your project region differs
+          SUPABASE_POOLER_HOST: aws-0-eu-west-1.pooler.supabase.com
         run: |
+          set -euo pipefail
           mkdir -p backups
           stamp=$(date -u +%Y%m%d)
           outfile="backups/investio-${stamp}.sql"
 
-          if [ -n "$SUPABASE_DB_PASSWORD" ] && [ -n "$SUPABASE_PROJECT_REF" ] && [ -n "$SUPABASE_ACCESS_TOKEN" ]; then
-            echo "Using Supabase CLI (IPv4 pooler fallback)..."
-            supabase db dump \
-              --project-ref "$SUPABASE_PROJECT_REF" \
-              --password "$SUPABASE_DB_PASSWORD" \
+          if [ -n "${SUPABASE_DB_PASSWORD:-}" ] && [ -n "${SUPABASE_PROJECT_REF:-}" ]; then
+            echo "Using session pooler (IPv4) via pg_dump..."
+            export PGPASSWORD="$SUPABASE_DB_PASSWORD"
+            export PGSSLMODE=require
+            pg_dump \
+              -h "$SUPABASE_POOLER_HOST" \
+              -p 5432 \
+              -U "postgres.${SUPABASE_PROJECT_REF}" \
+              -d postgres \
+              --no-owner --no-acl \
               -f "$outfile"
-          elif [ -n "$SUPABASE_DB_URL" ]; then
+          elif [ -n "${SUPABASE_DB_URL:-}" ]; then
             if echo "$SUPABASE_DB_URL" | grep -q '@db\.'; then
-              echo "SUPABASE_DB_URL uses direct host db.*.supabase.co (IPv6)."
-              echo "GitHub Actions cannot reach it. Use one of:"
-              echo "  1. Add SUPABASE_DB_PASSWORD secret (recommended) — CLI uses IPv4 pooler"
-              echo "  2. Update SUPABASE_DB_URL to session pooler URI (*.pooler.supabase.com:5432)"
+              echo "SUPABASE_DB_URL uses db.*.supabase.co (IPv6) — GitHub Actions cannot reach it."
+              echo "Add SUPABASE_DB_PASSWORD + SUPABASE_PROJECT_REF, or use a *.pooler.supabase.com URI."
               exit 1
             fi
             echo "Using pg_dump with pooler URL..."
-            sudo apt-get update && sudo apt-get install -y postgresql-client
+            export PGSSLMODE=require
             pg_dump "$SUPABASE_DB_URL" --no-owner --no-acl -f "$outfile"
           else
-            echo "Set SUPABASE_DB_PASSWORD (recommended) or SUPABASE_DB_URL (session pooler only)."
+            echo "Set SUPABASE_DB_PASSWORD and SUPABASE_PROJECT_REF (recommended)."
             exit 1
           fi
 
