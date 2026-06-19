@@ -20,6 +20,10 @@ __pycache__/
 *.egg-info/
 .pytest_cache/
 
+# Appflow CLI binary (downloaded by npm run sync:appflow-env)
+tools/appflow
+tools/appflow.exe
+
 # OS / editor
 .DS_Store
 Thumbs.db

@@ -27,3 +27,16 @@ Users see **"Continue to supabase.co"** until you brand the Google OAuth consent
 3. Add GitHub secrets: `APPLE_CLIENT_ID`, `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY`.
 4. Run **Sync OAuth Providers to Supabase**.
 5. Set `VITE_APPLE_SIGN_IN_ENABLED=true` on Vercel and redeploy.
+
+## Android / Capacitor OAuth
+
+Google sign-in on the native app uses an **in-app browser** (Chrome Custom Tab), not the system browser. After auth, Supabase redirects to `https://localhost/auth/callback` and the app reopens automatically.
+
+**Supabase → Authentication → URL configuration** must include:
+
+```text
+https://localhost/auth/callback
+https://localhost/auth/reset-password
+```
+
+Appflow **Production** environment uses the same redirect URLs (`VITE_AUTH_REDIRECT_URL`, etc.).

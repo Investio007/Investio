@@ -107,6 +107,67 @@ export async function establishSessionFromUrl(
   return { session: null, error: error?.message ?? null };
 }
 
+/** Exchange PKCE code (or hash tokens) from a native OAuth callback URL. */
+export async function establishSessionFromCallbackUrl(
+  client: SupabaseClient,
+  callbackUrl: string,
+): Promise<{ session: Session | null; error: string | null }> {
+  let parsed: URL;
+  try {
+    parsed = new URL(callbackUrl);
+  } catch {
+    return { session: null, error: "Invalid callback URL." };
+  }
+
+  const authError =
+    parsed.searchParams.get("error_description") ??
+    parsed.searchParams.get("error");
+  if (authError) {
+    return { session: null, error: authError };
+  }
+
+  const code = parsed.searchParams.get("code");
+  if (code) {
+    const { data: existing } = await client.auth.getSession();
+    if (existing.session) {
+      return { session: existing.session, error: null };
+    }
+
+    const { data, error } = await client.auth.exchangeCodeForSession(code);
+    if (data.session) {
+      return { session: data.session, error: null };
+    }
+    if (error) {
+      const { data: sessionData } = await client.auth.getSession();
+      if (sessionData.session) {
+        return { session: sessionData.session, error: null };
+      }
+      return { session: null, error: error.message };
+    }
+  }
+
+  const hash = new URLSearchParams(parsed.hash.replace(/^#/, ""));
+  if (hash.has("access_token")) {
+    const { data, error } = await client.auth.setSession({
+      access_token: hash.get("access_token") ?? "",
+      refresh_token: hash.get("refresh_token") ?? "",
+    });
+    if (data.session) {
+      return { session: data.session, error: null };
+    }
+    if (error) {
+      return { session: null, error: error.message };
+    }
+  }
+
+  const { data, error } = await client.auth.getSession();
+  if (data.session) {
+    return { session: data.session, error: null };
+  }
+
+  return { session: null, error: error?.message ?? "No auth code in callback URL." };
+}
+
 export function friendlyAuthError(message: string): string {
   if (/code verifier not found/i.test(message)) {
     if (hasPendingPasswordRecovery() || isPasswordRecoveryFromUrl()) {

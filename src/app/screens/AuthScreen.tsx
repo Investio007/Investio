@@ -39,7 +39,9 @@ export function AuthScreen() {
       const { error: oauthError } = await signInWithOAuth(provider);
       if (oauthError) {
         setError(oauthError.message);
+        return;
       }
+      navigate("/home", { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
