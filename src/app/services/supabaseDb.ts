@@ -3,6 +3,8 @@ import type { InvestioAsset } from "../data/assets";
 import type { PortfoliosStore } from "../types/portfolio";
 import { migrateLegacyPortfolio } from "../types/portfolio";
 import { getAuthRedirectUrl, getPasswordResetRedirectUrl, isSupabaseConfigured, supabase } from "../../lib/supabase";
+import { isCapacitorNative } from "../../lib/capacitorPlatform";
+import { signInWithOAuthNative } from "../../lib/mobileOAuth";
 
 export type PortfolioConfig = {
   amount: number;
@@ -150,6 +152,10 @@ export type OAuthProvider = "google" | "apple";
 export async function signInWithOAuth(provider: OAuthProvider) {
   const client = requireClient();
   const redirectTo = getAuthRedirectUrl();
+
+  if (isCapacitorNative()) {
+    return signInWithOAuthNative(client, provider);
+  }
 
   return client.auth.signInWithOAuth({
     provider,

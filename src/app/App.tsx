@@ -3,8 +3,16 @@ import { RouterProvider } from "react-router";
 import { router } from "./routes";
 import { GlobalToast } from "./components/GlobalToast";
 import { getPostHog } from "../lib/posthog";
+import { isCapacitorNative } from "../lib/capacitorPlatform";
+import { registerMobileAuthDeepLinkHandler } from "../lib/mobileOAuth";
 
 export default function App() {
+  useEffect(() => {
+    if (isCapacitorNative()) {
+      registerMobileAuthDeepLinkHandler();
+    }
+  }, []);
+
   useEffect(() => {
     const client = getPostHog();
     if (!client) return;
