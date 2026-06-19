@@ -449,14 +449,16 @@ Branch protection on `main` requires CI to pass before merge.
 
 ---
 
-## Android (Capacitor)
+## Android (Capacitor + Ionic Appflow)
+
+The `android/` native project is committed for **Ionic Appflow** / CI (`npx cap sync android`).
 
 ```bash
-npm run build:android   # build + cap sync
+npm run build:android   # build web + cap sync
 npm run cap:open:android
 ```
 
-Configure `VITE_AUTH_REDIRECT_URL` and add matching URLs in Supabase for deep-link callbacks.
+**Appflow:** Connect repo `Investio007/Investio`, branch `main`. The build runs `npm run build` then `cap sync android` — the `android/` folder must exist in git (not gitignored at repo root).
 
 ---
 

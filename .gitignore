@@ -6,8 +6,7 @@ server/venv/
 dist/
 .vite/
 
-# Capacitor native projects (generated via `npx cap add android`)
-android/
+# Capacitor — commit android/ for Appflow/CI; native .gitignore excludes build artifacts
 ios/
 
 # Environment & secrets — never commit these
