@@ -5,6 +5,10 @@ import { migrateLegacyPortfolio } from "../types/portfolio";
 import { getAuthRedirectUrl, getPasswordResetRedirectUrl, isSupabaseConfigured, supabase } from "../../lib/supabase";
 import { isCapacitorNative } from "../../lib/capacitorPlatform";
 import { signInWithOAuthNative } from "../../lib/mobileOAuth";
+import {
+  isNativeGoogleAuthAvailable,
+  signInWithGoogleNative,
+} from "../../lib/nativeGoogleAuth";
 
 export type PortfolioConfig = {
   amount: number;
@@ -154,6 +158,9 @@ export async function signInWithOAuth(provider: OAuthProvider) {
   const redirectTo = getAuthRedirectUrl();
 
   if (isCapacitorNative()) {
+    if (provider === "google" && isNativeGoogleAuthAvailable()) {
+      return signInWithGoogleNative(client);
+    }
     return signInWithOAuthNative(client, provider);
   }
 
