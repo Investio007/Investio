@@ -75,7 +75,6 @@ export async function signInWithGoogleNative(
     const response = await SocialLogin.login({
       provider: "google",
       options: {
-        scopes: ["email", "profile"],
         nonce: nonceDigest,
       } as GoogleLoginOptions,
     });
