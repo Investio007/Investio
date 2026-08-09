@@ -1,10 +1,10 @@
 import { Navigate, Outlet } from "react-router";
-import { useInvestio } from "../context/InvestioContext";
+import { useCrowth } from "../context/CrowthContext";
 import { isSupabaseConfigured } from "../../lib/supabase";
 import { isAuthenticatedSession } from "../lib/auth";
 
 export function ProtectedRoute() {
-  const { user, authLoading } = useInvestio();
+  const { user, authLoading } = useCrowth();
 
   if (authLoading) {
     return (

@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { PostHogProvider } from "posthog-js/react";
 import App from "./app/App.tsx";
 import { PostHogIdentify } from "./app/components/PostHogIdentify.tsx";
-import { InvestioProvider } from "./app/context/InvestioContext";
+import { CrowthProvider } from "./app/context/CrowthContext";
 import { initPostHog } from "./lib/posthog";
 import { initSentry, Sentry } from "./lib/sentry";
 import "./styles/index.css";
@@ -34,10 +34,10 @@ function SentryFallback() {
 function AppTree() {
   return (
     <Sentry.ErrorBoundary fallback={<SentryFallback />}>
-      <InvestioProvider>
+      <CrowthProvider>
         <PostHogIdentify />
         <App />
-      </InvestioProvider>
+      </CrowthProvider>
     </Sentry.ErrorBoundary>
   );
 }

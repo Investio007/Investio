@@ -1,7 +1,7 @@
-Update the existing mobile fintech prototype for the app **Investio**.
+Update the existing mobile fintech prototype for the app **Crowth**.
 
 Brand
-App Name: Investio
+App Name: Crowth
 Tagline: Invest Smarter
 
 The app is **not a trading platform**. It is an **AI investment analysis and simulation tool**.
@@ -160,7 +160,7 @@ Each investment card should include:
 
 Add a small disclaimer on onboarding and profile page:
 
-"Investio is an AI investment analysis platform.
+"Crowth is an AI investment analysis platform.
 This app does not hold funds, execute trades, or manage real investments.
 All portfolio values are simulations for educational purposes."
 

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { BookOpen, Brain, Target, ChevronRight } from "lucide-react";
 import { Button } from "../components/ui/button";
-import { useInvestio } from "../context/InvestioContext";
+import { useCrowth } from "../context/CrowthContext";
 
 const slides = [
   {
@@ -25,7 +25,7 @@ const slides = [
 export function OnboardingScreen() {
   const [currentSlide, setCurrentSlide] = useState(0);
   const navigate = useNavigate();
-  const { user, authLoading } = useInvestio();
+  const { user, authLoading } = useCrowth();
 
   useEffect(() => {
     if (!authLoading && user) {
@@ -89,7 +89,7 @@ export function OnboardingScreen() {
         {currentSlide === slides.length - 1 && (
           <div className="mb-4 p-4 bg-[#F5F7FA] rounded-2xl">
             <p className="text-xs text-[#1F2937] text-center leading-relaxed">
-              Investio is an AI investment analysis platform. This app does not
+              Crowth is an AI investment analysis platform. This app does not
               hold funds, execute trades, or manage real investments. All
               portfolio values are simulations for educational purposes.
             </p>

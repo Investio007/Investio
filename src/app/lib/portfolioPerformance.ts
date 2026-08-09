@@ -1,5 +1,5 @@
 import type { QuoteData } from "../services/marketApi";
-import type { InvestioAsset } from "../data/assets";
+import type { CrowthAsset } from "../data/assets";
 
 export function formatQuotePrice(quote: QuoteData | undefined | null): string {
   if (quote?.price == null) return "—";
@@ -41,7 +41,7 @@ export type PortfolioPerformance = {
 };
 
 export function computePortfolioPerformance(
-  holdings: InvestioAsset[],
+  holdings: CrowthAsset[],
   quotes: Record<string, QuoteData>,
   totalValue: number,
 ): PortfolioPerformance {

@@ -2,11 +2,11 @@ import { useState } from "react";
 import { useNavigate } from "react-router";
 import { ArrowLeft, Wallet } from "lucide-react";
 import { Card } from "../components/ui/card";
-import { useInvestio } from "../context/InvestioContext";
+import { useCrowth } from "../context/CrowthContext";
 
 export function AddDemoFundsScreen() {
   const navigate = useNavigate();
-  const { addFunds, toast } = useInvestio();
+  const { addFunds, toast } = useCrowth();
   const [amount, setAmount] = useState(5000);
   const [selectedChip, setSelectedChip] = useState<number | null>(5000);
 
@@ -104,7 +104,7 @@ export function AddDemoFundsScreen() {
         {/* Disclaimer */}
         <div className="mt-8 p-4 bg-white rounded-2xl">
           <p className="text-xs text-gray-500 text-center leading-relaxed">
-            Investio is an AI investment analysis platform. This app does not
+            Crowth is an AI investment analysis platform. This app does not
             hold funds, execute trades, or manage real investments. All
             portfolio values are simulations for educational purposes.
           </p>

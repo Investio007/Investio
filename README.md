@@ -1,6 +1,6 @@
-# Investio
+# Crowth
 
-Investio is a mobile-first fintech **education** app for learning how to invest. Users explore live market data, compare companies, build demo portfolios with performance tracking, and chat with an AI assistant — on web and Android (Capacitor).
+Crowth is a mobile-first fintech **education** app for learning how to invest. Users explore live market data, compare companies, build demo portfolios with performance tracking, and chat with an AI assistant — on web and Android (Capacitor).
 
 **Design origin:** [Fintech Mobile App Prototype (Figma)](https://www.figma.com/design/1bz8GTMOZQExoTqyYuBSbw/Fintech-Mobile-App-Prototype)
 
@@ -10,7 +10,7 @@ Investio is a mobile-first fintech **education** app for learning how to invest.
 | **API (Railway)** | https://investio-production.up.railway.app |
 | **Repository** | https://github.com/Investio007/Investio |
 
-> **Disclaimer:** Investio is for education and simulation only. It does not hold funds, execute trades, or provide financial advice. All portfolio values are demo data.
+> **Disclaimer:** Crowth is for education and simulation only. It does not hold funds, execute trades, or provide financial advice. All portfolio values are demo data.
 
 ---
 
@@ -127,7 +127,7 @@ flowchart LR
 ├── src/app/
 │   ├── screens/          # Route screens (Home, Compare, Portfolio, Auth, Legal, etc.)
 │   ├── components/       # UI, MobileNav, AuthPageLayout, PasswordInput, SignUpLegalConsent
-│   ├── context/          # InvestioContext (portfolios, balance, auth)
+│   ├── context/          # CrowthContext (portfolios, balance, auth)
 │   ├── hooks/            # useMarketData, usePortfolioQuotes, useAddToPortfolioWithPicker
 │   ├── services/         # marketApi, aiApi, supabaseDb
 │   ├── lib/              # authSessionFromUrl, marketApiBaseUrl, portfolioPerformance
@@ -356,13 +356,13 @@ See **[TESTING.md](TESTING.md)** for the full pre-release checklist (auth, respo
 
 **v0.1 status:** Production QA complete — auth, password reset, live market data, portfolio performance, AI insights, Sentry, PostHog, and uptime monitoring verified on https://investio-wheat.vercel.app.
 
-See **[docs/investio-live-status.html](docs/investio-live-status.html)** for a visual stack completion dashboard (open in browser).
+See **[docs/crowth-live-status.html](docs/crowth-live-status.html)** for a visual stack completion dashboard (open in browser).
 
 ---
 
 ## Product analytics (PostHog)
 
-Investio uses **PostHog** for pageviews and product analytics (SPA route tracking + identified users when signed in).
+Crowth uses **PostHog** for pageviews and product analytics (SPA route tracking + identified users when signed in).
 
 ### Setup
 
@@ -383,7 +383,7 @@ Open the app, navigate a few screens, then check PostHog → **Activity** or onb
 
 ## Error monitoring (Sentry)
 
-Investio uses Sentry on **frontend** (`@sentry/react`) and **backend** (`sentry-sdk` + FastAPI).
+Crowth uses Sentry on **frontend** (`@sentry/react`) and **backend** (`sentry-sdk` + FastAPI).
 
 ### Frontend (Vercel)
 
@@ -466,7 +466,7 @@ npm run cap:open:android
 
 ### Railway deploy fails at "Healthcheck failure"
 
-1. Open **Railway → Investio → Deployments** and click **Diagnose** on the failed step.
+1. Open **Railway → Crowth → Deployments** and click **Diagnose** on the failed step.
 2. Common causes:
    - **Invalid `SENTRY_DSN`** — must be a full URL starting with `https://`, or remove the variable. A malformed DSN crashes startup before uvicorn listens.
    - **Wrong healthcheck path** — set **Healthcheck Path** to `/api/health` in service Settings, or rely on `server/railway.toml`.
@@ -508,7 +508,7 @@ Verify `OLLAMA_API_KEY` and `OLLAMA_MODEL` on Railway. Check `/api/health` → `
 
 ### Google shows “Continue to supabase.co”
 
-Normal unless you configure a Supabase custom auth domain. Set app name and logo in **Google Cloud Console** → OAuth consent screen for “Investio” branding.
+Normal unless you configure a Supabase custom auth domain. Set app name and logo in **Google Cloud Console** → OAuth consent screen for “Crowth” branding.
 
 ### Password reset email link fails
 

@@ -104,7 +104,7 @@ async function checkNoSecretsInBundle() {
   });
 }
 
-console.log(`\nInvestio QA smoke — ${BASE}\n`);
+console.log(`\nCrowth QA smoke — ${BASE}\n`);
 
 for (const path of routes) await checkRoute(path);
 for (const api of apis) await checkApi(api);

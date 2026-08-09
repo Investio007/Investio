@@ -1,14 +1,14 @@
 import { useState } from "react";
-import type { InvestioAsset } from "../data/assets";
-import { useInvestio } from "../context/InvestioContext";
+import type { CrowthAsset } from "../data/assets";
+import { useCrowth } from "../context/CrowthContext";
 import { AddToPortfolioDialog } from "../components/AddToPortfolioDialog";
 
 export function useAddToPortfolioWithPicker() {
-  const { portfolios, activePortfolioId, addToPortfolio } = useInvestio();
+  const { portfolios, activePortfolioId, addToPortfolio } = useCrowth();
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [pendingAsset, setPendingAsset] = useState<InvestioAsset | null>(null);
+  const [pendingAsset, setPendingAsset] = useState<CrowthAsset | null>(null);
 
-  const requestAdd = (asset: InvestioAsset) => {
+  const requestAdd = (asset: CrowthAsset) => {
     if (portfolios.length === 0) {
       addToPortfolio(asset);
       return;

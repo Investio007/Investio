@@ -1,4 +1,4 @@
-# Investio — QA & Testing Checklist
+# Crowth — QA & Testing Checklist
 
 Use this before every release. Designed for **frontend-only** testing when the FastAPI backend is not deployed yet. Mark each item **Pass / Fail / Skip / N/A**.
 

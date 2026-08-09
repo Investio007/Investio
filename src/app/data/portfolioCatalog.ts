@@ -1,14 +1,14 @@
-import { assets, companies, type InvestioAsset } from "./assets";
+import { assets, companies, type CrowthAsset } from "./assets";
 import { COUNTRY_STOCKS } from "./countryMarkets";
 
-const DEFAULT_ANALYSIS: InvestioAsset["analysis"] = {
+const DEFAULT_ANALYSIS: CrowthAsset["analysis"] = {
   growth: { label: "Moderate", color: "gold", pct: 55 },
   profitability: { label: "Moderate", color: "gold", pct: 55 },
   stability: { label: "Moderate", color: "gold", pct: 55 },
   competition: { label: "Moderate", color: "gold", pct: 50 },
 };
 
-function stubAsset(id: string, name: string, ticker: string): InvestioAsset {
+function stubAsset(id: string, name: string, ticker: string): CrowthAsset {
   return {
     id,
     name,
@@ -27,8 +27,8 @@ function stubAsset(id: string, name: string, ticker: string): InvestioAsset {
 }
 
 /** All companies the user can add to a portfolio. */
-export function getPickableAssets(): InvestioAsset[] {
-  const byId = new Map<string, InvestioAsset>();
+export function getPickableAssets(): CrowthAsset[] {
+  const byId = new Map<string, CrowthAsset>();
 
   for (const asset of [...companies, ...assets]) {
     byId.set(asset.id, asset);

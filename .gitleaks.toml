@@ -1,4 +1,4 @@
-title = "Investio gitleaks config"
+title = "Crowth gitleaks config"
 
 [allowlist]
 description = "Ignore placeholder env templates"

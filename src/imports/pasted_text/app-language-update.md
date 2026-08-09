@@ -1,4 +1,4 @@
-Update the language used in the Investio mobile application prototype.
+Update the language used in the Crowth mobile application prototype.
 
 The English must be written in **simple Grade 9 level English** so beginner investors can easily understand everything.
 
