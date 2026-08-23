@@ -6,7 +6,7 @@ Crowth is a mobile-first fintech **education** app for learning how to invest. U
 
 | Environment | URL |
 |-------------|-----|
-| **Production (web)** | https://investio-wheat.vercel.app |
+| **Production (web)** | https://investio-wheat.vercel.app *(migrating to Cloudflare — see `docs/cloudflare.md`)* |
 | **API (Railway)** | https://investio-production.up.railway.app |
 | **Repository** | https://github.com/Investio007/Investio |
 
@@ -115,7 +115,7 @@ flowchart LR
 | Market data | Finnhub (primary), yfinance, Alpha Vantage (fallbacks) |
 | AI | Ollama (`gemma3:4b` on Ollama Cloud by default) |
 | Auth & cloud | Supabase (profiles, portfolio sync, Google OAuth, password reset) |
-| Hosting | Vercel (frontend), Railway (backend) |
+| Hosting | Cloudflare Workers + assets (frontend), Railway (backend); Vercel still active during migration |
 | Observability | Sentry (errors), PostHog (analytics), UptimeRobot (uptime) |
 | CI | GitHub Actions (frontend build/typecheck, backend smoke tests, secrets scan) |
 
@@ -256,7 +256,17 @@ Vite proxies `/api/*` to port **8002** in development.
 
 ## Deployment
 
-### Frontend — Vercel
+### Frontend — Cloudflare (recommended)
+
+See **[`docs/cloudflare.md`](docs/cloudflare.md)** for Workers setup, domain layout (`app.` / marketing / company), and custom domains.
+
+```bash
+npm run deploy:cloudflare
+```
+
+Dashboard: Workers & Pages → project name **`crowth`** → build `npm run build` → deploy `npx wrangler deploy`.
+
+### Frontend — Vercel (legacy)
 
 1. Connect the GitHub repo to Vercel.
 2. Set environment variables:
