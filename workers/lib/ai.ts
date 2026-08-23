@@ -18,7 +18,8 @@ export interface AiBinding {
   run(model: string, inputs: Record<string, unknown>): Promise<unknown>;
 }
 
-const DEFAULT_MODEL = "@cf/meta/llama-3.1-8b-instruct";
+// llama-3.1-8b-instruct was deprecated 2026-05-30 on Workers AI
+const DEFAULT_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
 
 export function parseAiResponse(fullText: string): AiChatResponse {
   const lines = fullText
