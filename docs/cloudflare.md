@@ -1,6 +1,6 @@
 # Cloudflare setup for Crowth
 
-Use Cloudflare for DNS + the web app. Keep the FastAPI backend on Railway.
+Use Cloudflare for DNS, the web app, and the market/AI API (Workers).
 
 ## Recommended domain layout
 
@@ -10,41 +10,51 @@ After you buy/connect a domain in Cloudflare (example: `crowth.co.za`):
 |------|---------|
 | `crowth.co.za` | Company / marketing site |
 | `www.crowth.co.za` | Redirect → apex or marketing |
-| `app.crowth.co.za` | Crowth product (this Vite app) |
-| `api.crowth.co.za` *(optional)* | CNAME/proxy to Railway later |
+| `app.crowth.co.za` | Crowth product (Vite SPA + Worker `/api`) |
 
-Until the domain is ready, Cloudflare gives you a `*.workers.dev` URL.
+Until the domain is ready, Cloudflare gives you a `*.workers.dev` URL (e.g. `crowth.investiodev.workers.dev`).
 
-## Deploy this app (Workers + static assets)
+## Architecture
 
-This repo uses **Workers with static assets** (not classic Pages-only), so `/api/*` can proxy to Railway.
+- **Static assets:** Vite `dist/` via Workers static assets
+- **API:** same Worker handles `/api/*` natively:
+  - Finnhub → quotes, charts, snapshot, compare, insights
+  - Workers AI → `POST /api/ai/chat`
+- Railway FastAPI is optional/legacy; not required for Cloudflare hosting
 
-### Dashboard (matches the form you opened)
+## Deploy
 
-1. Cloudflare → **Workers & Pages** → Create
-2. Connect GitHub repo `Investio007/Investio`, branch `main`
-3. **Project name:** `crowth`
-4. **Build command:** `npm run build`
-5. **Deploy command:** `npx wrangler deploy`
-6. Deploy
+### Dashboard
+
+1. Cloudflare → **Workers & Pages** → project **`crowth`**
+2. Connect GitHub `Investio007/Investio`, branch `main`
+3. **Build command:** `npm run build`
+4. **Deploy command:** `npx wrangler deploy`
+5. Deploy
 
 ### Local / CLI
 
 ```bash
 npm run build
 npx wrangler login
+npx wrangler secret put FINNHUB_API_KEY
 npx wrangler deploy
 ```
 
-### Environment variable
+### Secrets & bindings
 
-In the Worker → **Settings → Variables**:
+| Name | How | Purpose |
+|------|-----|---------|
+| `FINNHUB_API_KEY` | `wrangler secret put` or dashboard | Live market data |
+| `AI` | `[ai] binding = "AI"` in `wrangler.toml` | Workers AI chat |
 
-| Name | Value |
-|------|--------|
-| `MARKET_API_ORIGIN` | `https://investio-production.up.railway.app` |
+Verify:
 
-(Update later if you rename the Railway service.)
+```bash
+curl https://crowth.investiodev.workers.dev/api/health
+```
+
+Expect JSON with `"status":"ok"` and `market_data.finnhub: true` after the secret is set.
 
 ### After `app.crowth.co.za` is live
 
@@ -52,9 +62,10 @@ In the Worker → **Settings → Variables**:
 2. Supabase → Auth → URL config: add  
    `https://app.crowth.co.za/auth/callback`  
    `https://app.crowth.co.za/auth/reset-password`
-3. Railway → set `CORS_ORIGINS=https://app.crowth.co.za`
-4. Google OAuth consent / branding: use Crowth + `app.crowth.co.za`
-5. Appflow Production: set `VITE_AUTH_REDIRECT_URL=https://app.crowth.co.za/auth/callback` (web) or keep mobile localhost redirects for Capacitor
+3. Google OAuth consent / branding: use Crowth + `app.crowth.co.za`
+4. Appflow Production: set `VITE_AUTH_REDIRECT_URL=https://app.crowth.co.za/auth/callback` (web) or keep mobile localhost redirects for Capacitor
+
+The frontend uses same-origin `/api` on `*.workers.dev` and `*.crowth.*` hosts (see `getMarketApiBaseUrl()`).
 
 ## Marketing / company site
 
@@ -62,5 +73,5 @@ Create a **second** Cloudflare project (Pages or Workers) for the marketing site
 
 ## Do not use
 
-- Classic Pages `_redirects` proxy to Railway — Cloudflare cannot proxy **external** origins that way.
-- Leaving project name as `investio` — use **`crowth`**.
+- Classic Pages `_redirects` proxy to an external API origin
+- Leaving project name as `investio` — use **`crowth`**

@@ -6,9 +6,15 @@ main = "workers/api-proxy.ts"
 directory = "./dist"
 not_found_handling = "single-page-application"
 binding = "ASSETS"
-# Proxy /api to Railway before static assets
+# Run Worker for /api before static SPA fallback
 run_worker_first = ["/api/*"]
 
-[vars]
-# Override in Cloudflare dashboard → Settings → Variables for production
-MARKET_API_ORIGIN = "https://investio-production.up.railway.app"
+# Cloudflare Workers AI (Llama etc.) for /api/ai/chat
+[ai]
+binding = "AI"
+
+# Secrets (set via dashboard or CLI — do not commit values):
+#   npx wrangler secret put FINNHUB_API_KEY
+#
+# Optional legacy Railway fallback (unused when native API is live):
+#   MARKET_API_ORIGIN
