@@ -1,7 +1,28 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
-const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim();
-const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined)?.trim();
+declare global {
+  interface Window {
+    /** Injected by Cloudflare Worker from secrets when Vite build vars are missing */
+    __CROWTH_ENV__?: {
+      VITE_SUPABASE_URL?: string;
+      VITE_SUPABASE_ANON_KEY?: string;
+    };
+  }
+}
+
+function readPublicEnv(
+  name: "VITE_SUPABASE_URL" | "VITE_SUPABASE_ANON_KEY",
+): string | undefined {
+  const fromVite = (import.meta.env[name] as string | undefined)?.trim();
+  if (fromVite) return fromVite;
+  if (typeof window !== "undefined") {
+    return window.__CROWTH_ENV__?.[name]?.trim();
+  }
+  return undefined;
+}
+
+const supabaseUrl = readPublicEnv("VITE_SUPABASE_URL");
+const supabaseAnonKey = readPublicEnv("VITE_SUPABASE_ANON_KEY");
 
 const PLACEHOLDER_PATTERN = /your_|placeholder|paste_/i;
 

@@ -18,6 +18,10 @@ export interface Env {
   ASSETS: Fetcher;
   AI?: AiBinding;
   FINNHUB_API_KEY?: string;
+  /** Public Supabase project URL — injected into HTML for the SPA */
+  SUPABASE_URL?: string;
+  /** Public anon key — injected into HTML for the SPA */
+  SUPABASE_ANON_KEY?: string;
   /** Optional fallback proxy if native handlers fail (legacy Railway). */
   MARKET_API_ORIGIN?: string;
 }
@@ -569,6 +573,40 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
   return json({ detail: "Not found" }, 404);
 }
 
+/** Bake public Supabase config into HTML so CF Git builds work without Vite build vars. */
+async function serveAssets(request: Request, env: Env): Promise<Response> {
+  const assetResponse = await env.ASSETS.fetch(request);
+  const contentType = assetResponse.headers.get("content-type") || "";
+  if (!contentType.includes("text/html")) {
+    return withSecurityHeaders(assetResponse);
+  }
+
+  const supabaseUrl = (env.SUPABASE_URL || "").trim();
+  const supabaseAnonKey = (env.SUPABASE_ANON_KEY || "").trim();
+  if (!supabaseUrl || !supabaseAnonKey) {
+    return withSecurityHeaders(assetResponse);
+  }
+
+  const html = await assetResponse.text();
+  const boot = `<script>window.__CROWTH_ENV__=${JSON.stringify({
+    VITE_SUPABASE_URL: supabaseUrl,
+    VITE_SUPABASE_ANON_KEY: supabaseAnonKey,
+  })};</script>`;
+  const patched = html.includes("</head>")
+    ? html.replace("</head>", `${boot}</head>`)
+    : `${boot}${html}`;
+
+  const headers = new Headers(assetResponse.headers);
+  headers.delete("content-length");
+  return withSecurityHeaders(
+    new Response(patched, {
+      status: assetResponse.status,
+      statusText: assetResponse.statusText,
+      headers,
+    }),
+  );
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -582,6 +620,6 @@ export default {
       }
     }
 
-    return withSecurityHeaders(await env.ASSETS.fetch(request));
+    return serveAssets(request, env);
   },
 } satisfies ExportedHandler<Env>;
