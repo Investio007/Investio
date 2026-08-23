@@ -15,7 +15,7 @@ export const LEGAL_POLICIES: Record<LegalPolicyId, LegalPolicy> = {
     sections: [
       {
         heading: "Educational use only",
-        body: "Investio is an educational platform for learning about investing. It does not hold funds, execute trades, or provide personalised financial advice. All portfolio values and balances are simulations for learning purposes.",
+        body: "Crowth is an educational platform for learning about investing. It does not hold funds, execute trades, or provide personalised financial advice. All portfolio values and balances are simulations for learning purposes.",
       },
       {
         heading: "Your account",
@@ -23,11 +23,11 @@ export const LEGAL_POLICIES: Record<LegalPolicyId, LegalPolicy> = {
       },
       {
         heading: "Acceptable use",
-        body: "Do not misuse the service, attempt to disrupt our systems, or use Investio in violation of applicable laws. We may suspend accounts that abuse the platform.",
+        body: "Do not misuse the service, attempt to disrupt our systems, or use Crowth in violation of applicable laws. We may suspend accounts that abuse the platform.",
       },
       {
         heading: "Changes",
-        body: "We may update these terms from time to time. Continued use of Investio after changes are posted means you accept the updated terms.",
+        body: "We may update these terms from time to time. Continued use of Crowth after changes are posted means you accept the updated terms.",
       },
     ],
   },
@@ -42,7 +42,7 @@ export const LEGAL_POLICIES: Record<LegalPolicyId, LegalPolicy> = {
       },
       {
         heading: "How we use information",
-        body: "We use this information to provide, secure, and improve Investio — for example to sync your demo portfolio, save your preferences, and keep you signed in. We do not sell your personal information.",
+        body: "We use this information to provide, secure, and improve Crowth — for example to sync your demo portfolio, save your preferences, and keep you signed in. We do not sell your personal information.",
       },
       {
         heading: "Storage & security",
@@ -61,7 +61,7 @@ export const LEGAL_POLICIES: Record<LegalPolicyId, LegalPolicy> = {
     sections: [
       {
         heading: "What we use",
-        body: "Investio uses browser storage (including local storage and session storage) to keep you signed in, remember your demo portfolios, and complete secure sign-in flows (PKCE). These are essential for the app to work.",
+        body: "Crowth uses browser storage (including local storage and session storage) to keep you signed in, remember your demo portfolios, and complete secure sign-in flows (PKCE). These are essential for the app to work.",
       },
       {
         heading: "Third parties",
@@ -69,7 +69,7 @@ export const LEGAL_POLICIES: Record<LegalPolicyId, LegalPolicy> = {
       },
       {
         heading: "Managing cookies",
-        body: "You can clear site data for Investio in your browser settings. Clearing storage will sign you out and remove locally saved demo data until you sign in again.",
+        body: "You can clear site data for Crowth in your browser settings. Clearing storage will sign you out and remove locally saved demo data until you sign in again.",
       },
     ],
   },

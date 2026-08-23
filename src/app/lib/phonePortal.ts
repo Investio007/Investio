@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-export const PHONE_ROOT_ID = "investio-phone-root";
+export const PHONE_ROOT_ID = "crowth-phone-root";
 
 export function getPhoneRoot(): HTMLElement | null {
   if (typeof document === "undefined") return null;

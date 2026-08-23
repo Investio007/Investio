@@ -26,7 +26,7 @@ export function getAuthErrorFromUrl(): string | null {
   );
 }
 
-export const PENDING_RECOVERY_KEY = "investio_pending_recovery";
+export const PENDING_RECOVERY_KEY = "crowth_pending_recovery";
 
 export function markPendingPasswordRecovery(): void {
   sessionStorage.setItem(PENDING_RECOVERY_KEY, "1");

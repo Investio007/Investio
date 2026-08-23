@@ -9,7 +9,7 @@ import { requestPasswordReset } from "../services/supabaseDb";
 import { isSupabaseConfigured } from "../../lib/supabase";
 import { markPendingPasswordRecovery } from "../lib/authSessionFromUrl";
 
-const COOLDOWN_KEY = "investio_reset_cooldown";
+const COOLDOWN_KEY = "crowth_reset_cooldown";
 const COOLDOWN_MS = 60_000;
 
 function secondsUntilCooldownEnds(): number {

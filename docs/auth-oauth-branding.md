@@ -6,7 +6,7 @@ Users see **"Continue to supabase.co"** until you brand the Google OAuth consent
 
 1. Open [Google Cloud Console](https://console.cloud.google.com/) → select the project linked to your OAuth client.
 2. Go to **APIs & Services** → **OAuth consent screen**.
-3. Set **App name** to `Investio`.
+3. Set **App name** to `Crowth`.
 4. Upload **App logo** (`public/logo.png` from this repo).
 5. Set **User support email** and **Developer contact email**.
 6. Add **App domain** (optional but recommended):
@@ -30,7 +30,11 @@ Users see **"Continue to supabase.co"** until you brand the Google OAuth consent
 
 ## Android / Capacitor OAuth
 
-Google sign-in on the native app uses an **in-app browser** (Chrome Custom Tab), not the system browser. After auth, Supabase redirects to `https://localhost/auth/callback` and the app reopens automatically.
+Native Google Sign-In uses package **`com.crowth.app`**. In Google Cloud, create an **Android** OAuth client with that package name and your signing **SHA-1**.
+
+`VITE_GOOGLE_WEB_CLIENT_ID` must be the **Web** client ID (same one configured for Supabase).
+
+After browser-based OAuth fallback, Supabase redirects to `https://localhost/auth/callback`.
 
 **Supabase → Authentication → URL configuration** must include:
 

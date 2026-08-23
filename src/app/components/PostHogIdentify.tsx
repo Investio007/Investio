@@ -1,10 +1,10 @@
 import { useEffect } from "react";
-import { useInvestio } from "../context/InvestioContext";
+import { useCrowth } from "../context/CrowthContext";
 import { getPostHog } from "../../lib/posthog";
 
 /** Tie PostHog persons to Supabase user ids when signed in. */
 export function PostHogIdentify() {
-  const { user } = useInvestio();
+  const { user } = useCrowth();
 
   useEffect(() => {
     const client = getPostHog();

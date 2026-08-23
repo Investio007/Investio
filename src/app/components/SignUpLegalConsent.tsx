@@ -14,7 +14,7 @@ export function SignUpLegalConsent({
     <div className="text-[11px] sm:text-xs text-gray-600 leading-relaxed space-y-2">
       <p>
         By tapping {actionLabel}, you agree to create an account and to
-        Investio{" "}
+        Crowth{" "}
         <Link to="/legal/terms" className={policyLinkClass}>
           Terms of Service
         </Link>

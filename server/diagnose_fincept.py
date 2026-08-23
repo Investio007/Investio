@@ -1,7 +1,7 @@
 """
-Investio — Fincept Terminal Diagnostic
+Crowth — Fincept Terminal Diagnostic
 Prints every attribute and method available on quote and history objects.
-Run this before mapping Fincept to Investio's response shape.
+Run this before mapping Fincept to Crowth's response shape.
 """
 
 print("=" * 60)

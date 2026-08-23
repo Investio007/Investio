@@ -40,8 +40,8 @@ const redirectUrls = [
   ...AUTH_PATHS.map((path) => `${SITE_URL}${path}`),
   ...AUTH_PATHS.map((path) => `${PRODUCTION_SITE_URL}${path}`),
   // Vercel preview deployments (PR branches)
-  "https://investio-*-investio007s-projects.vercel.app/auth/callback",
-  "https://investio-*-investio007s-projects.vercel.app/auth/reset-password",
+  "https://crowth-*-crowth007s-projects.vercel.app/auth/callback",
+  "https://crowth-*-crowth007s-projects.vercel.app/auth/reset-password",
   ...EXTRA_REDIRECTS.split(",").map((u) => u.trim()).filter(Boolean),
 ];
 const uriAllowList = [...new Set(redirectUrls)].join(",");

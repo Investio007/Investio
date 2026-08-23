@@ -10,7 +10,7 @@ import {
 } from "react";
 import type { User } from "@supabase/supabase-js";
 import { clearDemoSession } from "../lib/auth";
-import type { InvestioAsset } from "../data/assets";
+import type { CrowthAsset } from "../data/assets";
 import { isSupabaseConfigured, supabase } from "../../lib/supabase";
 import { captureEvent } from "../../lib/analytics";
 import {
@@ -31,13 +31,13 @@ type ToastState = {
   message: string;
 };
 
-type InvestioContextValue = {
+type CrowthContextValue = {
   demoBalance: number;
   portfolios: UserPortfolio[];
   activePortfolioId: string | null;
   activePortfolio: UserPortfolio | null;
   /** Holdings in the currently active portfolio (backward compatible). */
-  portfolio: InvestioAsset[];
+  portfolio: CrowthAsset[];
   portfolioConfig: PortfolioConfig;
   toast: ToastState;
   user: User | null;
@@ -48,21 +48,21 @@ type InvestioContextValue = {
   deletePortfolio: (portfolioId: string) => void;
   setActivePortfolio: (portfolioId: string) => void;
   renamePortfolio: (portfolioId: string, name: string) => void;
-  addToPortfolio: (asset: InvestioAsset, portfolioId?: string) => void;
+  addToPortfolio: (asset: CrowthAsset, portfolioId?: string) => void;
   removeFromPortfolio: (assetId: string, portfolioId?: string) => void;
   addFunds: (amount: number) => void;
   savePortfolioConfig: (config: NonNullable<PortfolioConfig>) => void;
   signOut: () => Promise<void>;
 };
 
-const InvestioContext = createContext<InvestioContextValue | undefined>(
+const CrowthContext = createContext<CrowthContextValue | undefined>(
   undefined,
 );
 
 const SAVE_DEBOUNCE_MS = 800;
 
 function loadPortfoliosStore(): PortfoliosStore {
-  const stored = localStorage.getItem("investio_portfolios");
+  const stored = localStorage.getItem("crowth_portfolios");
   if (stored) {
     try {
       const parsed = JSON.parse(stored) as PortfoliosStore;
@@ -80,10 +80,10 @@ function loadPortfoliosStore(): PortfoliosStore {
 
   try {
     const legacyHoldings = JSON.parse(
-      localStorage.getItem("investio_portfolio") || "[]",
-    ) as InvestioAsset[];
+      localStorage.getItem("crowth_portfolio") || "[]",
+    ) as CrowthAsset[];
     const legacyConfig = JSON.parse(
-      localStorage.getItem("investio_portfolio_config") || "null",
+      localStorage.getItem("crowth_portfolio_config") || "null",
     ) as PortfolioConfig;
     return migrateLegacyPortfolio(legacyHoldings, legacyConfig);
   } catch {
@@ -91,9 +91,9 @@ function loadPortfoliosStore(): PortfoliosStore {
   }
 }
 
-export function InvestioProvider({ children }: { children: ReactNode }) {
+export function CrowthProvider({ children }: { children: ReactNode }) {
   const [demoBalance, setDemoBalance] = useState(() =>
-    Number(localStorage.getItem("investio_balance") || 25000),
+    Number(localStorage.getItem("crowth_balance") || 25000),
   );
 
   const [portfoliosStore, setPortfoliosStore] = useState<PortfoliosStore>(
@@ -125,8 +125,8 @@ export function InvestioProvider({ children }: { children: ReactNode }) {
 
   const persistLocal = useCallback(
     (balance: number, store: PortfoliosStore) => {
-      localStorage.setItem("investio_balance", String(balance));
-      localStorage.setItem("investio_portfolios", JSON.stringify(store));
+      localStorage.setItem("crowth_balance", String(balance));
+      localStorage.setItem("crowth_portfolios", JSON.stringify(store));
     },
     [],
   );
@@ -144,7 +144,7 @@ export function InvestioProvider({ children }: { children: ReactNode }) {
           demoBalance: balance,
           portfoliosStore: store,
         }).catch((err) => {
-          console.error("[Investio] cloud save failed:", err);
+          console.error("[Crowth] cloud save failed:", err);
         });
       }, SAVE_DEBOUNCE_MS);
     },
@@ -273,7 +273,7 @@ export function InvestioProvider({ children }: { children: ReactNode }) {
   };
 
   const addToPortfolio = useCallback(
-    (asset: InvestioAsset, portfolioId?: string) => {
+    (asset: CrowthAsset, portfolioId?: string) => {
       setPortfoliosStore((prev) => {
         const { store, message } = applyAddToPortfolio(prev, asset, portfolioId);
         if (message) {
@@ -330,11 +330,11 @@ export function InvestioProvider({ children }: { children: ReactNode }) {
     }
     clearDemoSession();
     setUser(null);
-    localStorage.removeItem("investio_user");
+    localStorage.removeItem("crowth_user");
   };
 
   return (
-    <InvestioContext.Provider
+    <CrowthContext.Provider
       value={{
         demoBalance,
         portfolios: portfoliosStore.portfolios,
@@ -359,14 +359,14 @@ export function InvestioProvider({ children }: { children: ReactNode }) {
       }}
     >
       {children}
-    </InvestioContext.Provider>
+    </CrowthContext.Provider>
   );
 };
 
-export const useInvestio = () => {
-  const context = useContext(InvestioContext);
+export const useCrowth = () => {
+  const context = useContext(CrowthContext);
   if (!context) {
-    throw new Error("useInvestio must be used within InvestioProvider");
+    throw new Error("useCrowth must be used within CrowthProvider");
   }
   return context;
 };

@@ -1,5 +1,5 @@
 import type { User } from "@supabase/supabase-js";
-import type { InvestioAsset } from "../data/assets";
+import type { CrowthAsset } from "../data/assets";
 import type { PortfoliosStore } from "../types/portfolio";
 import { migrateLegacyPortfolio } from "../types/portfolio";
 import { getAuthRedirectUrl, getPasswordResetRedirectUrl, isSupabaseConfigured, supabase } from "../../lib/supabase";
@@ -26,7 +26,7 @@ export type UserAppData = {
   portfoliosStore: PortfoliosStore;
 };
 
-function parsePortfoliosStore(raw: unknown, fallbackHoldings: InvestioAsset[]): PortfoliosStore {
+function parsePortfoliosStore(raw: unknown, fallbackHoldings: CrowthAsset[]): PortfoliosStore {
   if (raw && typeof raw === "object" && "version" in raw && (raw as PortfoliosStore).version === 2) {
     const store = raw as PortfoliosStore;
     return {
@@ -44,7 +44,7 @@ function parsePortfoliosStore(raw: unknown, fallbackHoldings: InvestioAsset[]): 
   return migrateLegacyPortfolio(fallbackHoldings, legacyConfig);
 }
 
-function flattenHoldings(store: PortfoliosStore): InvestioAsset[] {
+function flattenHoldings(store: PortfoliosStore): CrowthAsset[] {
   return store.portfolios.flatMap((portfolio) =>
     portfolio.holdings.map((asset) => ({
       ...asset,
@@ -72,7 +72,7 @@ export async function loadUserAppData(user: User): Promise<UserAppData | null> {
     .maybeSingle();
 
   if (profileError) {
-    console.error("[Investio] profile load failed:", profileError.message);
+    console.error("[Crowth] profile load failed:", profileError.message);
     return null;
   }
 
@@ -83,12 +83,12 @@ export async function loadUserAppData(user: User): Promise<UserAppData | null> {
     .order("created_at", { ascending: true });
 
   if (itemsError) {
-    console.error("[Investio] portfolio load failed:", itemsError.message);
+    console.error("[Crowth] portfolio load failed:", itemsError.message);
     return null;
   }
 
   const fallbackHoldings = (items ?? [])
-    .map((row) => row.asset_data as InvestioAsset)
+    .map((row) => row.asset_data as CrowthAsset)
     .filter(Boolean);
 
   const portfoliosStore = parsePortfoliosStore(profile?.portfolio_config, fallbackHoldings);

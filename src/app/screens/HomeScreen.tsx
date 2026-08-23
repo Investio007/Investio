@@ -10,9 +10,9 @@ import {
   LogOut,
 } from "lucide-react";
 import { Card } from "../components/ui/card";
-import { useInvestio } from "../context/InvestioContext";
+import { useCrowth } from "../context/CrowthContext";
 import { useAddToPortfolioWithPicker } from "../hooks/useAddToPortfolioWithPicker";
-import { companies, type InvestioAsset } from "../data/assets";
+import { companies, type CrowthAsset } from "../data/assets";
 import {
   COUNTRY_MARKETS,
   getCountryById,
@@ -52,7 +52,7 @@ function formatInsightPrice(insight: MarketInsight): string {
   })}`;
 }
 
-function insightToAsset(insight: MarketInsight): InvestioAsset {
+function insightToAsset(insight: MarketInsight): CrowthAsset {
   const existing = companies.find((company) => company.id === insight.id);
   if (existing) return existing;
 
@@ -88,7 +88,7 @@ function formatUpdatedAt(iso: string | null): string {
 
 export function HomeScreen() {
   const navigate = useNavigate();
-  const { demoBalance, signOut } = useInvestio();
+  const { demoBalance, signOut } = useCrowth();
   const { requestAdd, pickerDialog } = useAddToPortfolioWithPicker();
   const { data: insights, updatedAt, loading: insightsLoading, error: insightsError } = useInsights();
   const [selectedCountryId, setSelectedCountryId] = useState(COUNTRY_MARKETS[0].id);

@@ -1,7 +1,7 @@
-import { useInvestio } from "../context/InvestioContext";
+import { useCrowth } from "../context/CrowthContext";
 
 export function GlobalToast() {
-  const { toast } = useInvestio();
+  const { toast } = useCrowth();
 
   if (!toast.visible) return null;
 

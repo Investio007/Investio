@@ -1,6 +1,6 @@
 {
-  "appId": "com.investio.app",
-  "appName": "Investio",
+  "appId": "com.crowth.app",
+  "appName": "Crowth",
   "webDir": "dist",
   "server": {
     "androidScheme": "https",

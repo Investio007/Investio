@@ -105,7 +105,7 @@ export function AuthScreen() {
       footer={
         <div className="mt-6 sm:mt-8 p-3 sm:p-4 bg-[#F5F7FA] rounded-2xl">
           <p className="text-[11px] sm:text-xs text-[#1F2937] text-center leading-relaxed">
-            Investio is an AI investment analysis platform. This app does not
+            Crowth is an AI investment analysis platform. This app does not
             hold funds, execute trades, or manage real investments. All
             portfolio values are simulations for educational purposes.
           </p>

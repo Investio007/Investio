@@ -20,7 +20,7 @@ export function AuthPageLayout({ children, header, footer }: AuthPageLayoutProps
                 <TrendingUp className="w-6 h-6 sm:w-7 sm:h-7 text-white" />
               </div>
               <span className="text-xl sm:text-2xl font-bold text-[#0A1F44]">
-                Investio
+                Crowth
               </span>
             </div>
 

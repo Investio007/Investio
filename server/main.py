@@ -31,18 +31,18 @@ try:
 
     _fincept_client = FinceptClient()
     FINCEPT_AVAILABLE = True
-    print("[Investio] Fincept Terminal loaded successfully")
+    print("[Crowth] Fincept Terminal loaded successfully")
 except Exception as e:
     _fincept_client = None
     FINCEPT_AVAILABLE = False
-    print(f"[Investio] Fincept Terminal not available: {e} — falling back to yfinance")
+    print(f"[Crowth] Fincept Terminal not available: {e} — falling back to yfinance")
 
 FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY", "").strip()
 FINNHUB_BASE = "https://finnhub.io/api/v1"
 if FINNHUB_API_KEY:
-    print("[Investio] Finnhub API configured — using as primary market data source")
+    print("[Crowth] Finnhub API configured — using as primary market data source")
 else:
-    print("[Investio] FINNHUB_API_KEY not set — using yfinance / Alpha Vantage fallbacks")
+    print("[Crowth] FINNHUB_API_KEY not set — using yfinance / Alpha Vantage fallbacks")
 
 ALPHA_VANTAGE_KEY = os.getenv("ALPHA_VANTAGE_KEY", "")
 NEWS_API_KEY = os.getenv("NEWS_API_KEY", "")
@@ -55,9 +55,9 @@ OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gemma3:4b").strip()
 if OLLAMA_API_KEY and OLLAMA_BASE_URL == "http://localhost:11434":
     OLLAMA_BASE_URL = "https://ollama.com"
 if OLLAMA_API_KEY or OLLAMA_BASE_URL != "http://localhost:11434":
-    print(f"[Investio] Ollama configured — model={OLLAMA_MODEL}, base={OLLAMA_BASE_URL}")
+    print(f"[Crowth] Ollama configured — model={OLLAMA_MODEL}, base={OLLAMA_BASE_URL}")
 else:
-    print("[Investio] OLLAMA_API_KEY not set — AI assistant will use local Ollama if running")
+    print("[Crowth] OLLAMA_API_KEY not set — AI assistant will use local Ollama if running")
 
 
 def get_ollama_settings() -> tuple[str, str, str]:
@@ -83,7 +83,7 @@ def get_ollama_settings() -> tuple[str, str, str]:
         base = "https://ollama.com"
     return base, api_key, model
 
-AI_SYSTEM_PROMPT = """You are Investio's AI investment advisor for South African users.
+AI_SYSTEM_PROMPT = """You are Crowth's AI investment advisor for South African users.
 Answer every question in simple, plain English. Maximum 3 sentences.
 Always end your response on a new line with exactly one of these:
 Risk Level: Low
@@ -91,7 +91,7 @@ Risk Level: Moderate
 Risk Level: High
 Do not use markdown, bullet points, or formatting of any kind."""
 
-app = FastAPI(title="Investio Market Data API")
+app = FastAPI(title="Crowth Market Data API")
 
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development").strip().lower()
 ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "").strip()
@@ -648,7 +648,7 @@ def fetch_chart_finnhub(ticker_symbol: str, period: str) -> list[dict]:
 
 def fetch_quote_fincept(ticker_symbol: str) -> dict:
     """
-    Fincept quote normalized to the exact Investio quote dict shape.
+    Fincept quote normalized to the exact Crowth quote dict shape.
     """
     if not FINCEPT_AVAILABLE or _fincept_client is None:
         raise RuntimeError("Fincept Terminal not available")
@@ -697,7 +697,7 @@ def fetch_quote_fincept(ticker_symbol: str) -> dict:
 
 def fetch_chart_fincept(ticker_symbol: str, period: str) -> list[dict]:
     """
-    Fincept history normalized to the exact Investio chart list-of-dicts shape.
+    Fincept history normalized to the exact Crowth chart list-of-dicts shape.
     """
     if not FINCEPT_AVAILABLE or _fincept_client is None:
         raise RuntimeError("Fincept Terminal not available")
@@ -796,7 +796,7 @@ def fetch_price_via_download(ticker_symbol: str) -> Optional[float]:
 
 def fetch_quote_alphavantage(ticker_symbol: str) -> dict:
     """
-    Alpha Vantage quote normalized to the exact Investio quote dict shape.
+    Alpha Vantage quote normalized to the exact Crowth quote dict shape.
     """
     if not ALPHA_VANTAGE_KEY:
         raise RuntimeError("ALPHA_VANTAGE_KEY not set")
@@ -844,7 +844,7 @@ def fetch_quote_alphavantage(ticker_symbol: str) -> dict:
 
 def fetch_chart_alphavantage(ticker_symbol: str, period: str) -> list[dict]:
     """
-    Alpha Vantage OHLCV normalized to the exact Investio chart list-of-dicts shape.
+    Alpha Vantage OHLCV normalized to the exact Crowth chart list-of-dicts shape.
     """
     if not ALPHA_VANTAGE_KEY:
         raise RuntimeError("ALPHA_VANTAGE_KEY not set")
@@ -965,7 +965,7 @@ def build_synthetic_chart_from_quote(quote: dict, period: str) -> list[dict]:
 
 def fetch_quote_yfinance(ticker_symbol: str) -> dict:
     """
-    yfinance quote normalized to the exact Investio quote dict shape.
+    yfinance quote normalized to the exact Crowth quote dict shape.
     """
     ticker = yf.Ticker(ticker_symbol, session=get_yf_session())
     info = ticker.info
@@ -1023,7 +1023,7 @@ def fetch_quote_yfinance(ticker_symbol: str) -> dict:
 
 def fetch_chart_yfinance(ticker_symbol: str, period: str) -> list[dict]:
     """
-    yfinance chart normalized to Investio list-of-dicts chart shape.
+    yfinance chart normalized to Crowth list-of-dicts chart shape.
     Falls back to daily bars when intraday data is unavailable.
     """
     yf_period, yf_interval = PERIOD_MAP.get(period, ("5d", "30m"))
@@ -1118,25 +1118,25 @@ def fetch_quote_sync(ticker_symbol: str) -> dict:
         try:
             return fetch_quote_finnhub(ticker_symbol)
         except Exception as fh_err:
-            print(f"[Investio] Finnhub failed for {ticker_symbol}: {fh_err}")
+            print(f"[Crowth] Finnhub failed for {ticker_symbol}: {fh_err}")
 
     try:
         return fetch_quote_yfinance(ticker_symbol)
     except Exception as yf_err:
-        print(f"[Investio] yfinance failed for {ticker_symbol}: {yf_err}")
+        print(f"[Crowth] yfinance failed for {ticker_symbol}: {yf_err}")
 
     if alpha_vantage_enabled():
         try:
             return fetch_quote_alphavantage(ticker_symbol)
         except Exception as av_err:
-            print(f"[Investio] Alpha Vantage failed for {ticker_symbol}: {av_err} — disabling AV for 10m")
+            print(f"[Crowth] Alpha Vantage failed for {ticker_symbol}: {av_err} — disabling AV for 10m")
             disable_alpha_vantage_temporarily()
 
     if FINCEPT_AVAILABLE:
         try:
             return fetch_quote_fincept(ticker_symbol)
         except Exception as fincept_err:
-            print(f"[Investio] Fincept failed for {ticker_symbol}: {fincept_err}")
+            print(f"[Crowth] Fincept failed for {ticker_symbol}: {fincept_err}")
 
     raise ValueError(f"No quote data returned for {ticker_symbol}")
 
@@ -1149,25 +1149,25 @@ def fetch_chart_sync(ticker_symbol: str, period: str) -> list[dict]:
         try:
             return fetch_chart_finnhub(ticker_symbol, period)
         except Exception as fh_err:
-            print(f"[Investio] Finnhub chart failed for {ticker_symbol}/{period}: {fh_err}")
+            print(f"[Crowth] Finnhub chart failed for {ticker_symbol}/{period}: {fh_err}")
 
     try:
         return fetch_chart_yfinance(ticker_symbol, period)
     except Exception as yf_err:
-        print(f"[Investio] yfinance chart failed for {ticker_symbol}/{period}: {yf_err}")
+        print(f"[Crowth] yfinance chart failed for {ticker_symbol}/{period}: {yf_err}")
 
     if alpha_vantage_enabled():
         try:
             return fetch_chart_alphavantage(ticker_symbol, period)
         except Exception as av_err:
-            print(f"[Investio] Alpha Vantage chart failed for {ticker_symbol}/{period}: {av_err} — disabling AV for 10m")
+            print(f"[Crowth] Alpha Vantage chart failed for {ticker_symbol}/{period}: {av_err} — disabling AV for 10m")
             disable_alpha_vantage_temporarily()
 
     if FINCEPT_AVAILABLE:
         try:
             return fetch_chart_fincept(ticker_symbol, period)
         except Exception as fincept_err:
-            print(f"[Investio] Fincept chart failed for {ticker_symbol}/{period}: {fincept_err}")
+            print(f"[Crowth] Fincept chart failed for {ticker_symbol}/{period}: {fincept_err}")
 
     raise ValueError(f"No chart data for {ticker_symbol}")
 

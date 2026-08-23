@@ -1,4 +1,4 @@
-import type { InvestioAsset } from "../data/assets";
+import type { CrowthAsset } from "../data/assets";
 import type { PortfolioConfig } from "../services/supabaseDb";
 
 export type UserPortfolio = {
@@ -6,7 +6,7 @@ export type UserPortfolio = {
   name: string;
   createdAt: string;
   config: PortfolioConfig;
-  holdings: InvestioAsset[];
+  holdings: CrowthAsset[];
 };
 
 export type PortfoliosStore = {
@@ -26,7 +26,7 @@ export function createEmptyPortfolio(name: string, config: PortfolioConfig = nul
 }
 
 export function migrateLegacyPortfolio(
-  holdings: InvestioAsset[],
+  holdings: CrowthAsset[],
   config: PortfolioConfig,
 ): PortfoliosStore {
   if (holdings.length === 0 && !config) {
@@ -45,7 +45,7 @@ export function migrateLegacyPortfolio(
 
 export function applyAddToPortfolio(
   prev: PortfoliosStore,
-  asset: InvestioAsset,
+  asset: CrowthAsset,
   portfolioId?: string,
 ): { store: PortfoliosStore; message: string } {
   let targetId = portfolioId ?? prev.activePortfolioId;

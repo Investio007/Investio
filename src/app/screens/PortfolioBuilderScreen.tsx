@@ -29,9 +29,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "../components/ui/alert-dialog";
-import { useInvestio } from "../context/InvestioContext";
+import { useCrowth } from "../context/CrowthContext";
 import { getPickableAssets } from "../data/portfolioCatalog";
-import type { InvestioAsset } from "../data/assets";
+import type { CrowthAsset } from "../data/assets";
 import type { PortfolioConfig } from "../services/supabaseDb";
 import type { UserPortfolio } from "../types/portfolio";
 import { usePortfolioQuotes } from "../hooks/useMarketData";
@@ -183,7 +183,7 @@ function HoldingRow({
   onRemove,
   onOpen,
 }: {
-  asset: InvestioAsset;
+  asset: CrowthAsset;
   quote: QuoteData | undefined;
   perHoldingValue: number;
   onRemove: () => void;
@@ -254,14 +254,14 @@ type PortfolioDetailPanelProps = {
   portfolio: UserPortfolio;
   companySearch: string;
   showPicker: boolean;
-  filteredPickable: InvestioAsset[];
+  filteredPickable: CrowthAsset[];
   deleteDialogOpen: boolean;
   onBack: () => void;
   onDeleteDialogChange: (open: boolean) => void;
   onConfirmDelete: () => void;
   onTogglePicker: () => void;
   onSearchChange: (value: string) => void;
-  onAddCompany: (asset: InvestioAsset) => void;
+  onAddCompany: (asset: CrowthAsset) => void;
   onRemoveCompany: (assetId: string) => void;
   navigate: ReturnType<typeof useNavigate>;
 };
@@ -456,7 +456,7 @@ export function PortfolioBuilderScreen() {
     setActivePortfolio,
     addToPortfolio,
     removeFromPortfolio,
-  } = useInvestio();
+  } = useCrowth();
 
   const [view, setView] = useState<ScreenView>("list");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -518,7 +518,7 @@ export function PortfolioBuilderScreen() {
     openPortfolio(id);
   };
 
-  const handleAddCompany = (asset: InvestioAsset) => {
+  const handleAddCompany = (asset: CrowthAsset) => {
     if (!selectedPortfolioId) return;
     addToPortfolio(asset, selectedPortfolioId);
   };

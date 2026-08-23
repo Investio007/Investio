@@ -1,12 +1,12 @@
 import { Briefcase, ChevronRight } from "lucide-react";
-import type { InvestioAsset } from "../data/assets";
-import { useInvestio } from "../context/InvestioContext";
+import type { CrowthAsset } from "../data/assets";
+import { useCrowth } from "../context/CrowthContext";
 import { PhoneModal } from "./PhoneModal";
 
 type AddToPortfolioDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  asset: InvestioAsset | null;
+  asset: CrowthAsset | null;
   onAdded?: () => void;
 };
 
@@ -16,7 +16,7 @@ export function AddToPortfolioDialog({
   asset,
   onAdded,
 }: AddToPortfolioDialogProps) {
-  const { portfolios, addToPortfolio, setActivePortfolio } = useInvestio();
+  const { portfolios, addToPortfolio, setActivePortfolio } = useCrowth();
 
   const handleSelect = (portfolioId: string) => {
     if (!asset) return;

@@ -20,7 +20,7 @@ export const supabase: SupabaseClient | null = isSupabaseConfigured
         detectSessionInUrl: true,
         persistSession: true,
         autoRefreshToken: true,
-        storageKey: "investio-auth",
+        storageKey: "crowth-auth",
       },
     })
   : null;

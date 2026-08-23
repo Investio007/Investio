@@ -1,5 +1,5 @@
 /** Session flag for local dev demo (never enabled in production builds). */
-export const DEMO_SESSION_KEY = "investio_demo_session";
+export const DEMO_SESSION_KEY = "crowth_demo_session";
 
 export function isDemoSessionActive(): boolean {
   return sessionStorage.getItem(DEMO_SESSION_KEY) === "1";

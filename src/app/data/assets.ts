@@ -4,7 +4,7 @@ export type AnalysisValue = {
   pct: number;
 };
 
-export type InvestioAsset = {
+export type CrowthAsset = {
   id: string;
   name: string;
   ticker: string;
@@ -27,7 +27,7 @@ export type InvestioAsset = {
   chartPath: string;
 };
 
-export const assets: InvestioAsset[] = [
+export const assets: CrowthAsset[] = [
   {
     id: "aitech",
     name: "AI Technology ETF",
@@ -102,7 +102,7 @@ export const assets: InvestioAsset[] = [
   },
 ];
 
-export const companies: InvestioAsset[] = [
+export const companies: CrowthAsset[] = [
   {
     id: "apple",
     name: "Apple",

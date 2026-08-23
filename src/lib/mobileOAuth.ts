@@ -93,7 +93,7 @@ export async function signInWithOAuthNative(
 
       if (session.user.email) {
         localStorage.setItem(
-          "investio_user",
+          "crowth_user",
           JSON.stringify({ email: session.user.email }),
         );
       }
