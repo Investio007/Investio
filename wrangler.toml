@@ -1,0 +1,14 @@
+name = "crowth"
+compatibility_date = "2026-08-22"
+main = "workers/api-proxy.ts"
+
+[assets]
+directory = "./dist"
+not_found_handling = "single-page-application"
+binding = "ASSETS"
+# Proxy /api to Railway before static assets
+run_worker_first = ["/api/*"]
+
+[vars]
+# Override in Cloudflare dashboard → Settings → Variables for production
+MARKET_API_ORIGIN = "https://investio-production.up.railway.app"
