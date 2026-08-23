@@ -41,7 +41,7 @@ npx wrangler secret put FINNHUB_API_KEY
 npx wrangler deploy
 ```
 
-### Secrets & bindings
+### Secrets & bindings (Worker runtime)
 
 | Name | How | Purpose |
 |------|-----|---------|
@@ -55,6 +55,29 @@ curl https://crowth.investiodev.workers.dev/api/health
 ```
 
 Expect JSON with `"status":"ok"` and `market_data.finnhub: true` after the secret is set.
+
+### Build variables (Vite — optional) + Worker secrets (required for auth)
+
+Vite can bake `VITE_*` at build time. Cloudflare Workers Builds often omit them, so Crowth also injects Supabase config from **Worker secrets** into HTML at runtime:
+
+```bash
+npx wrangler secret put SUPABASE_URL          # same value as VITE_SUPABASE_URL
+npx wrangler secret put SUPABASE_ANON_KEY     # same value as VITE_SUPABASE_ANON_KEY
+```
+
+Optional Build variables (Settings → Build) if you want them baked in too:
+
+| Name | Secret? |
+|------|---------|
+| `VITE_SUPABASE_URL` | no |
+| `VITE_SUPABASE_ANON_KEY` | yes |
+
+Without either path, `/auth` shows “Supabase is not connected yet.”
+
+Supabase Auth redirect URLs (synced by `scripts/sync-oauth-to-supabase.mjs`):
+
+- `https://crowth.investiodev.workers.dev/auth/callback`
+- `https://crowth.investiodev.workers.dev/auth/reset-password`
 
 ### After `app.crowth.co.za` is live
 
