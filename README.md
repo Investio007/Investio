@@ -6,8 +6,12 @@ Crowth is a mobile-first fintech **education** app for learning how to invest. U
 
 | Environment | URL |
 |-------------|-----|
-| **Production (web)** | https://investio-wheat.vercel.app *(migrating to Cloudflare — see `docs/cloudflare.md`)* |
-| **API (Railway)** | https://investio-production.up.railway.app |
+| **Production (web)** | https://crowthza.app |
+| **www** | https://www.crowthza.app |
+| **workers.dev** | https://crowth.investiodev.workers.dev |
+| **Planned marketing** | `crowthza.com` / `crowthsa.com` (if registered) |
+| **Legacy web (Vercel)** | https://investio-wheat.vercel.app |
+| **Legacy API (Railway)** | https://investio-production.up.railway.app |
 | **Repository** | https://github.com/Investio007/Investio |
 
 > **Disclaimer:** Crowth is for education and simulation only. It does not hold funds, execute trades, or provide financial advice. All portfolio values are demo data.
@@ -40,7 +44,8 @@ Crowth is a mobile-first fintech **education** app for learning how to invest. U
 - AI long-term pick with beginner tips
 
 ### AI Advisor (`/ai-assistant`, `/advisor`)
-- Chat UI powered by **Ollama** (cloud or local)
+- Chat UI powered by **Cloudflare Workers AI** in production (Llama 3.3)
+- **Ollama** when running the local/Railway FastAPI backend
 - Plain-language answers with optional risk labels (Low / Moderate / High)
 - Suggested starter questions
 
@@ -68,39 +73,79 @@ Crowth is a mobile-first fintech **education** app for learning how to invest. U
 
 ## Architecture
 
+Production runs on a **single Cloudflare Worker** (`crowth`) that serves the Vite SPA and native `/api/*` routes (Finnhub + Workers AI). Supabase handles auth and portfolio sync. Vercel + Railway remain as legacy fallbacks.
+
 ```mermaid
-flowchart LR
-  subgraph client [Browser / Android]
-    Vite[Vite React SPA]
+flowchart TB
+  subgraph clients [Clients]
+    Web[Web browser]
+    Android[Android Capacitor]
   end
-  subgraph vercel [Vercel]
-  Proxy["/api/* proxy"]
+
+  subgraph domains [Domains]
+    AppDomain["crowthza.app"]
+    WwwDomain["www.crowthza.app"]
+    WorkersDev["crowth.investiodev.workers.dev"]
+    MktDomain["marketing domain planned"]
   end
-  subgraph railway [Railway]
-    API[FastAPI server]
+
+  subgraph cloudflare [Cloudflare Worker crowth]
+    SPA[Vite React SPA assets]
+    API["/api/* native routes"]
+    Inject["HTML inject __CROWTH_ENV__"]
   end
+
   subgraph external [External services]
-    SB[(Supabase Auth + DB)]
-    FH[Finnhub / yfinance]
-    OL[Ollama AI]
+    SB[(Supabase Auth + Postgres)]
+    FH[Finnhub API]
+    WAI[Workers AI]
     PH[PostHog]
     SE[Sentry]
   end
-  Vite -->|same-origin /api| Proxy
-  Vite -->|optional direct| API
-  Proxy --> API
-  Vite --> SB
-  Vite --> PH
-  Vite --> SE
+
+  subgraph legacy [Legacy optional]
+    Vercel[Vercel SPA + /api proxy]
+    Railway[FastAPI on Railway]
+  end
+
+  Web --> WorkersDev
+  Web --> AppDomain
+  Web --> WwwDomain
+  Android --> AppDomain
+  WorkersDev --> cloudflare
+  AppDomain --> cloudflare
+  WwwDomain --> cloudflare
+  MktDomain -.->|future marketing site| MktPlaceholder[Marketing site TBD]
+
+  cloudflare --> Inject
+  Inject --> SPA
+  SPA --> API
+  SPA --> SB
+  SPA --> PH
+  SPA --> SE
   API --> FH
-  API --> OL
-  API --> SE
+  API --> WAI
+
+  Web -.-> Vercel
+  Vercel -.-> Railway
 ```
 
-**How market data reaches production**
+**How market data reaches the app**
 
-1. **Recommended:** Leave `VITE_MARKET_API_URL` unset on Vercel. The app calls same-origin `/api/*`; `vercel.json` proxies to Railway on **production and preview** `*.vercel.app` URLs.
-2. **Alternative:** Set `VITE_MARKET_API_URL` only for non-Vercel hosting (not preview deployments — Railway CORS blocks `*.vercel.app`).
+1. **Cloudflare (production):** Leave `VITE_MARKET_API_URL` unset. The app calls same-origin `/api/*` on `crowthza.app`, `*.workers.dev`, and related hosts (see `getMarketApiBaseUrl()`).
+2. **Local dev:** Vite proxies `/api/*` to `localhost:8002` (FastAPI).
+3. **Legacy Vercel:** Same-origin `/api/*` via `vercel.json` proxy to Railway.
+4. **Android (Appflow):** Can override `VITE_MARKET_API_URL` to Railway or Cloudflare URL.
+
+**Domain plan (Cloudflare Registrar)**
+
+| Domain | Role |
+|--------|------|
+| `crowthza.app` | Product app → Worker `crowth` (live) |
+| `www.crowthza.app` | Same Worker (live) |
+| Marketing apex (e.g. `crowthza.com`) | Company site — separate project later |
+
+See **[`docs/cloudflare.md`](docs/cloudflare.md)** for deploy steps, secrets, and custom domains.
 
 ---
 
@@ -110,14 +155,16 @@ flowchart LR
 |--------|------------|
 | Frontend | React 18, TypeScript, Vite 6, Tailwind CSS 4, React Router 7 |
 | UI | Radix UI, Lucide icons, Recharts |
-| Mobile | Capacitor (Android) |
-| Backend | Python 3.12, FastAPI, Uvicorn |
-| Market data | Finnhub (primary), yfinance, Alpha Vantage (fallbacks) |
-| AI | Ollama (`gemma3:4b` on Ollama Cloud by default) |
+| Mobile | Capacitor (Android), Ionic Appflow |
+| Production API | Cloudflare Worker (TypeScript) — Finnhub + Workers AI |
+| Local / legacy API | Python 3.12, FastAPI, Uvicorn (Railway) |
+| Market data | Finnhub (primary on Worker); yfinance / Alpha Vantage (FastAPI fallbacks) |
+| AI | Workers AI (production Cloudflare); Ollama (local / Railway) |
 | Auth & cloud | Supabase (profiles, portfolio sync, Google OAuth, password reset) |
-| Hosting | Cloudflare Workers + assets (frontend), Railway (backend); Vercel still active during migration |
+| Hosting | **Cloudflare Workers + assets** (primary); Vercel + Railway (legacy) |
+| Domains | Cloudflare Registrar — `crowthza.app` (app, live) |
 | Observability | Sentry (errors), PostHog (analytics), UptimeRobot (uptime) |
-| CI | GitHub Actions (frontend build/typecheck, backend smoke tests, secrets scan) |
+| CI | GitHub Actions + Cloudflare Workers Builds (Git → `npm run build` → `wrangler deploy`) |
 
 ---
 
@@ -133,8 +180,11 @@ flowchart LR
 │   ├── lib/              # authSessionFromUrl, marketApiBaseUrl, portfolioPerformance
 │   ├── content/          # legalPolicies.ts
 │   └── data/             # assets, countryMarkets, portfolioCatalog
+├── workers/
+│   ├── api-proxy.ts      # Cloudflare Worker: SPA + /api routes
+│   └── lib/              # Finnhub client, cache, sentiment, Workers AI
 ├── server/
-│   ├── main.py           # FastAPI market + AI API
+│   ├── main.py           # FastAPI market + AI API (local dev / Railway legacy)
 │   ├── sentry_init.py    # Sentry init (skips invalid DSN)
 │   ├── Procfile          # Railway start command
 │   ├── nixpacks.toml
@@ -143,9 +193,12 @@ flowchart LR
 │   ├── qa-smoke.mjs      # Production smoke tests (22 checks)
 │   └── sync-oauth-to-supabase.mjs
 ├── supabase/             # Schema / migrations
-├── public/               # logo.png, icon.svg, favicons
+├── public/               # logo.png, icon.svg, favicons, _headers
+├── docs/
+│   └── cloudflare.md     # Cloudflare deploy, secrets, domains
 ├── .github/workflows/    # CI/CD pipelines
-├── vercel.json           # SPA rewrite + /api proxy to Railway
+├── wrangler.toml         # Cloudflare Worker config
+├── vercel.json           # SPA rewrite + /api proxy to Railway (legacy)
 ├── railway.toml          # Notes only — deploy config lives in server/railway.toml
 ├── TESTING.md            # Manual QA checklist
 └── .env.example          # Environment variable template
@@ -193,7 +246,7 @@ Copy `.env.example` to `.env` in the project root and fill in keys.
 |----------|----------|---------|
 | `VITE_SUPABASE_URL` | For auth/sync | Supabase project URL |
 | `VITE_SUPABASE_ANON_KEY` | For auth/sync | Supabase anon (public) key |
-| `VITE_MARKET_API_URL` | Local prod builds | `http://localhost:8002` — **omit on Vercel** (use `vercel.json` proxy; required for preview URLs) |
+| `VITE_MARKET_API_URL` | Local / Android override | `http://localhost:8002` — **omit on Cloudflare & Vercel** (same-origin `/api`) |
 | `VITE_AUTH_REDIRECT_URL` | Optional | Custom OAuth callback (Capacitor / custom domain) |
 | `VITE_AUTH_RESET_REDIRECT_URL` | Optional | Custom password-reset redirect |
 | `VITE_SENTRY_DSN` | Production | Sentry React DSN for error monitoring |
@@ -201,7 +254,19 @@ Copy `.env.example` to `.env` in the project root and fill in keys.
 | `VITE_POSTHOG_KEY` | Optional | PostHog project API key (`phc_...`) |
 | `VITE_POSTHOG_HOST` | Optional | Default `https://us.i.posthog.com` |
 
-#### Backend (`.env` or Railway env — **never** use `VITE_*` for secrets)
+#### Cloudflare Worker secrets (production — **never** commit values)
+
+Set via `npx wrangler secret put <NAME>` or Cloudflare dashboard → Worker `crowth` → Settings → Variables:
+
+| Secret | Purpose |
+|--------|---------|
+| `FINNHUB_API_KEY` | Live market quotes & charts |
+| `SUPABASE_URL` | Injected into SPA HTML as `window.__CROWTH_ENV__` |
+| `SUPABASE_ANON_KEY` | Same — enables auth without Vite build vars |
+
+Workers AI uses the `[ai]` binding in `wrangler.toml` (no API key needed).
+
+#### Backend — local / Railway (`.env` in project root or Railway env)
 
 | Variable | Required | Purpose |
 |----------|----------|---------|
@@ -249,6 +314,7 @@ Vite proxies `/api/*` to port **8002** in development.
 | `npm run qa` | typecheck + build + production smoke tests |
 | `npm run qa:smoke` | 22 automated checks against production |
 | `npm run sync:oauth` | Sync OAuth + redirect URLs to Supabase |
+| `npm run deploy:cloudflare` | Build + `wrangler deploy` to Worker `crowth` |
 | `docker compose up api` | Run backend in Docker (port 8002) |
 | `npm run build:android` | Build + Capacitor sync for Android |
 
@@ -256,17 +322,32 @@ Vite proxies `/api/*` to port **8002** in development.
 
 ## Deployment
 
-### Frontend — Cloudflare (recommended)
+### Production — Cloudflare Workers (recommended)
 
-See **[`docs/cloudflare.md`](docs/cloudflare.md)** for Workers setup, domain layout (`app.` / marketing / company), and custom domains.
+One Worker (`crowth`) serves the SPA and native `/api/*`. Deploys automatically from GitHub `main` via **Workers Builds**, or manually:
 
 ```bash
 npm run deploy:cloudflare
 ```
 
-Dashboard: Workers & Pages → project name **`crowth`** → build `npm run build` → deploy `npx wrangler deploy`.
+**Required secrets** (see [`docs/cloudflare.md`](docs/cloudflare.md)):
 
-### Frontend — Vercel (legacy)
+```bash
+npx wrangler secret put FINNHUB_API_KEY
+npx wrangler secret put SUPABASE_URL
+npx wrangler secret put SUPABASE_ANON_KEY
+```
+
+**Verify:**
+
+```bash
+curl https://crowthza.app/api/health
+# → {"status":"ok","market_data":{"finnhub":true},"ai":{"provider":"workers-ai","configured":true}}
+```
+
+**Custom domains** are already in `wrangler.toml` (`crowthza.app`, `www.crowthza.app`). After registering a marketing domain, create a separate Cloudflare project for that site.
+
+### Legacy — Vercel (web) + Railway (API)
 
 1. Connect the GitHub repo to Vercel.
 2. Set environment variables:
@@ -296,13 +377,15 @@ Update `vercel.json` if your Railway URL changes.
 
 ### Uptime monitoring
 
-[UptimeRobot](https://uptimerobot.com) (or similar) can watch the production auth page:
+[UptimeRobot](https://uptimerobot.com) (or similar) can watch:
 
 | Monitor | URL |
 |---------|-----|
-| Web availability | `https://investio-wheat.vercel.app/auth` |
-
-API health can be monitored separately at `https://investio-production.up.railway.app/api/health`.
+| Cloudflare app | `https://crowthza.app/auth` |
+| Cloudflare API | `https://crowthza.app/api/health` |
+| workers.dev fallback | `https://crowth.investiodev.workers.dev/api/health` |
+| Legacy web | `https://investio-wheat.vercel.app/auth` |
+| Legacy API | `https://investio-production.up.railway.app/api/health` |
 
 ### Supabase
 
@@ -312,8 +395,14 @@ API health can be monitored separately at `https://investio-production.up.railwa
 |-----|---------|
 | `http://localhost:5173/auth/callback` | Local OAuth |
 | `http://localhost:5173/auth/reset-password` | Local password reset |
-| `https://investio-wheat.vercel.app/auth/callback` | Production OAuth |
-| `https://investio-wheat.vercel.app/auth/reset-password` | Production password reset |
+| `https://crowthza.app/auth/callback` | Production OAuth |
+| `https://crowthza.app/auth/reset-password` | Production password reset |
+| `https://www.crowthza.app/auth/callback` | www OAuth |
+| `https://www.crowthza.app/auth/reset-password` | www password reset |
+| `https://crowth.investiodev.workers.dev/auth/callback` | workers.dev OAuth |
+| `https://crowth.investiodev.workers.dev/auth/reset-password` | workers.dev reset |
+| `https://investio-wheat.vercel.app/auth/callback` | Legacy Vercel OAuth |
+| `https://investio-wheat.vercel.app/auth/reset-password` | Legacy Vercel reset |
 
 **Automated sync:** Add secrets from [`.github/oauth-secrets.template`](.github/oauth-secrets.template), then run **Actions → Sync OAuth Providers to Supabase**. The sync script registers callback + reset-password URLs for both localhost and production.
 
@@ -323,13 +412,13 @@ API health can be monitored separately at `https://investio-production.up.railwa
 
 ---
 
-## API endpoints (backend)
+## API endpoints
+
+The same routes exist on **Cloudflare Worker** (production) and **FastAPI** (local dev / Railway legacy).
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/` | Lightweight liveness (`{"status":"ok"}`) |
-| `GET` | `/health` | Same as `/` (Railway / load-balancer friendly) |
-| `GET` | `/api/health` | Server status, data sources, AI + Sentry config |
+| `GET` | `/api/health` | Server status, Finnhub + AI config |
 | `GET` | `/api/quote/{symbol}` | Live quote |
 | `GET` | `/api/chart/{symbol}/{period}` | Chart data (`1D`–`1Y`) |
 | `GET` | `/api/snapshot/{symbol}/{period}` | Quote + chart bundle |
@@ -337,8 +426,15 @@ API health can be monitored separately at `https://investio-production.up.railwa
 | `GET` | `/api/compare` | 8-company compare with long-term scores |
 | `GET` | `/api/sentiment/{symbol}` | AI traffic-light analysis |
 | `POST` | `/api/ai/chat` | AI assistant chat |
+
+**FastAPI only** (Railway / local):
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/` , `/health` | Liveness (`{"status":"ok"}`) |
 | `GET` | `/api/cache/status` | In-memory cache debug |
 | `DELETE` | `/api/cache/clear` | Clear server cache (admin key if set) |
+| `GET` | `/api/sentry-debug` | Trigger test error (dev only) |
 
 ---
 
@@ -346,7 +442,7 @@ API health can be monitored separately at `https://investio-production.up.railwa
 
 - **Local:** `localStorage` — portfolios and demo balance (works offline)
 - **Cloud:** Supabase `profiles` + `portfolio_items` when signed in (RLS enabled)
-- **Market cache:** In-memory server cache (quotes ~60s, charts ~5m, compare ~60s)
+- **Market cache:** In-memory Worker cache (quotes ~60s, charts ~5m) on Cloudflare; FastAPI cache on Railway/local
 
 ---
 
@@ -364,7 +460,7 @@ npm run qa
 
 See **[TESTING.md](TESTING.md)** for the full pre-release checklist (auth, responsive layout, portfolio, compare, AI advisor, production sign-off).
 
-**v0.1 status:** Production QA complete — auth, password reset, live market data, portfolio performance, AI insights, Sentry, PostHog, and uptime monitoring verified on https://investio-wheat.vercel.app.
+**v0.1 status:** Cloudflare production live at https://crowthza.app (API, Workers AI, Supabase auth). Legacy Vercel + Railway still available.
 
 See **[docs/crowth-live-status.html](docs/crowth-live-status.html)** for a visual stack completion dashboard (open in browser).
 
@@ -378,10 +474,10 @@ Crowth uses **PostHog** for pageviews and product analytics (SPA route tracking 
 
 1. Create a project at [PostHog](https://posthog.com) (US cloud: `us.posthog.com`).
 2. Copy **Project API key** (`phc_...`) from Project Settings.
-3. Add to **Vercel** (and local `.env`):
+3. Add to **Cloudflare / Vercel** (and local `.env`):
    - `VITE_POSTHOG_KEY` — your `phc_...` key
    - `VITE_POSTHOG_HOST` — `https://us.i.posthog.com` (optional if using US cloud)
-4. Redeploy Vercel.
+4. Redeploy after env changes (`VITE_*` are baked in at build time; Cloudflare also injects Supabase via Worker secrets).
 
 Initializes in `src/lib/posthog.ts` only when `VITE_POSTHOG_KEY` is set. Captures `$pageview` on React Router navigation and identifies users by Supabase id after sign-in.
 
@@ -395,13 +491,13 @@ Open the app, navigate a few screens, then check PostHog → **Activity** or onb
 
 Crowth uses Sentry on **frontend** (`@sentry/react`) and **backend** (`sentry-sdk` + FastAPI).
 
-### Frontend (Vercel)
+### Frontend (Cloudflare / Vercel)
 
 1. Create a **React** project in [Sentry](https://sentry.io).
-2. Add to **Vercel** → Environment Variables (Production):
+2. Add environment variables:
    - `VITE_SENTRY_DSN` — React DSN
    - `VITE_SENTRY_ENVIRONMENT` — `production` (optional)
-3. Redeploy Vercel after adding env vars.
+3. Redeploy after adding env vars.
 
 Initializes in `src/lib/sentry.ts` only when `VITE_SENTRY_DSN` is set.
 
@@ -435,7 +531,7 @@ Then check **Sentry → Issues** for the backend project. This route returns 404
 | `backend-ci.yml` | All PRs, `server/**` | Import check, health + cache smoke test |
 | `secrets-scan.yml` | Push / PR | Gitleaks |
 | `sync-oauth-providers.yml` | Manual | Push OAuth + redirect config to Supabase |
-| `uptime-check.yml` | Every 5 min | Vercel `/auth` + Railway `/api/health` |
+| `uptime-check.yml` | Every 5 min | Cloudflare + legacy Vercel/Railway health |
 | `supabase-backup.yml` | Weekly (Sunday) | `pg_dump` → GitHub artifact (needs `SUPABASE_DB_URL`) |
 
 Branch protection on `main` requires CI to pass before merge.
@@ -451,8 +547,7 @@ Branch protection on `main` requires CI to pass before merge.
 - CORS restricted in production via `CORS_ORIGINS`
 - AI + public market endpoint IP rate limiting
 - Minimum 8-character passwords on sign-up and reset
-- Vercel security headers (CSP, HSTS, X-Frame-Options) in `vercel.json`
-- Backend security headers in production (`SecurityHeadersMiddleware`)
+- Vercel security headers (CSP, HSTS) in `vercel.json`; Cloudflare Worker security headers on all responses
 - Demo auth bypass disabled in production builds
 - Sentry error boundary + `VITE_SENTRY_DSN` / `SENTRY_DSN` monitoring
 - PostHog analytics with custom product events
@@ -468,11 +563,31 @@ npm run build:android   # build web + cap sync
 npm run cap:open:android
 ```
 
-**Appflow:** Connect repo `Investio007/Investio`, branch `main`. The build runs `npm run build` then `cap sync android` — the `android/` folder must exist in git (not gitignored at repo root).
+**Appflow:** Connect repo `Investio007/Investio`, branch `main`. App ID `53b04909`. Package `com.crowth.app`.
+
+Sync Production env from local `.env`:
+
+```bash
+npm run sync:appflow-env
+```
+
+Native Google Sign-In requires an Android OAuth client in Google Cloud with package `com.crowth.app` + signing SHA-1.
 
 ---
 
 ## Troubleshooting
+
+### Cloudflare: "Supabase is not connected yet" on /auth
+
+1. Set Worker secrets: `SUPABASE_URL` and `SUPABASE_ANON_KEY` (`npx wrangler secret put …`).
+2. Redeploy: `npm run deploy:cloudflare`.
+3. Hard refresh (Ctrl+Shift+R). View page source — should contain `window.__CROWTH_ENV__`.
+
+### Cloudflare: market data or AI fails
+
+1. Check `curl https://crowthza.app/api/health` → `finnhub: true`, `ai.configured: true`.
+2. Set `FINNHUB_API_KEY` secret if missing.
+3. AI uses Workers AI (Llama 3.3) — no separate API key; `[ai]` binding must exist in `wrangler.toml`.
 
 ### Railway deploy fails at "Healthcheck failure"
 
@@ -485,11 +600,11 @@ npm run cap:open:android
 
 ### Production shows `$ —`, "Chart unavailable", or failed AI rankings
 
-1. Check https://investio-wheat.vercel.app/api/health — should return JSON with `"status":"ok"`.
-2. If health works but the UI does not:
-   - **Trailing slash:** `VITE_MARKET_API_URL` must not end with `/` (or use the latest code that strips it).
-   - **Wrong URL:** Remove `VITE_MARKET_API_URL` on Vercel and rely on the `vercel.json` proxy.
-3. Redeploy Vercel after any env change (`VITE_*` are baked in at build time).
+1. **Cloudflare:** Check https://crowthza.app/api/health
+2. **Legacy Vercel:** Check https://investio-wheat.vercel.app/api/health
+3. If health works but the UI does not:
+   - **Trailing slash:** `VITE_MARKET_API_URL` must not end with `/`
+   - **Wrong URL:** Leave `VITE_MARKET_API_URL` unset on Cloudflare/Vercel (same-origin `/api`)
 4. Hard refresh the browser (Ctrl+Shift+R).
 
 ### Backend port conflicts (Windows)
@@ -506,15 +621,15 @@ Free Finnhub tier may not include candle data. Charts fall back to synthetic / y
 
 ### AI not responding
 
-Verify `OLLAMA_API_KEY` and `OLLAMA_MODEL` on Railway. Check `/api/health` → `ai.configured` is `true`.
+- **Cloudflare:** Check `/api/health` → `ai.configured: true`. Test `POST /api/ai/chat` with `{"message":"hi"}`.
+- **Railway / local:** Verify `OLLAMA_API_KEY` and `OLLAMA_MODEL`. Check `/api/health` → `ai.configured` is `true`.
 
 ### Google OAuth stuck or wrong redirect
 
 - Start sign-in from `/auth` in the **same browser tab**.
-- Use **https://investio-wheat.vercel.app/auth** for production OAuth — not a Vercel preview URL unless you added that preview to Supabase redirects.
-- Supabase **Site URL** should be `https://investio-wheat.vercel.app` (not `localhost`). Localhost stays in the redirect allow list only.
-- If you see `flow_state_already_used` or land on `localhost:5173` after Google sign-in: run `npm run dev` only when testing locally; otherwise use the production URL and re-run **Sync OAuth Providers to Supabase**.
-- Re-run **Sync OAuth Providers to Supabase** after changing auth URLs.
+- Use **https://crowthza.app/auth** for production OAuth.
+- Supabase redirect URLs must include your production callback + reset-password URLs.
+- Re-run **Actions → Sync OAuth Providers to Supabase** after adding domains.
 
 ### Google shows “Continue to supabase.co”
 
@@ -522,7 +637,7 @@ Normal unless you configure a Supabase custom auth domain. Set app name and logo
 
 ### Password reset email link fails
 
-Add `https://investio-wheat.vercel.app/auth/reset-password` to Supabase redirect URLs.
+Add your production reset URL to Supabase redirect URLs (e.g. `https://crowthza.app/auth/reset-password`).
 
 ---
 

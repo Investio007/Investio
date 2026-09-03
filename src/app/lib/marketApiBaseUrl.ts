@@ -10,7 +10,8 @@ export function getMarketApiBaseUrl(): string {
     if (
       /\.vercel\.app$/i.test(host) ||
       /\.workers\.dev$/i.test(host) ||
-      /(^|\.)crowth\./i.test(host)
+      /(^|\.)crowth\./i.test(host) ||
+      /(^|\.)crowthza\./i.test(host)
     ) {
       return "";
     }

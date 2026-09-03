@@ -1,6 +1,17 @@
 name = "crowth"
 compatibility_date = "2026-08-22"
 main = "workers/api-proxy.ts"
+workers_dev = true
+preview_urls = true
+
+# Product domain (Cloudflare Registrar)
+[[routes]]
+pattern = "crowthza.app"
+custom_domain = true
+
+[[routes]]
+pattern = "www.crowthza.app"
+custom_domain = true
 
 [assets]
 directory = "./dist"
