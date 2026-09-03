@@ -38,12 +38,18 @@ requireEnv("SUPABASE_PROJECT_REF", PROJECT_REF);
 const supabaseCallback = `https://${PROJECT_REF}.supabase.co/auth/v1/callback`;
 const CLOUDFLARE_APP_ORIGIN =
   process.env.AUTH_CLOUDFLARE_ORIGIN?.trim() ||
+  "https://crowthza.app";
+
+const WORKERS_DEV_ORIGIN =
+  process.env.AUTH_WORKERS_DEV_ORIGIN?.trim() ||
   "https://crowth.investiodev.workers.dev";
 
 const redirectUrls = [
   ...AUTH_PATHS.map((path) => `${SITE_URL}${path}`),
   ...AUTH_PATHS.map((path) => `${PRODUCTION_SITE_URL}${path}`),
   ...AUTH_PATHS.map((path) => `${CLOUDFLARE_APP_ORIGIN}${path}`),
+  ...AUTH_PATHS.map((path) => `${WORKERS_DEV_ORIGIN}${path}`),
+  ...AUTH_PATHS.map((path) => `https://www.crowthza.app${path}`),
   // Vercel preview deployments (PR branches)
   "https://crowth-*-crowth007s-projects.vercel.app/auth/callback",
   "https://crowth-*-crowth007s-projects.vercel.app/auth/reset-password",
