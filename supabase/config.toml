@@ -1,16 +1,28 @@
 # Local Supabase reference config (hosted project uses GitHub Actions sync script)
 # https://supabase.com/docs/guides/cli/config
+#
+# Hosted Google/GitHub/Apple OAuth is applied by scripts/sync-oauth-to-supabase.mjs
+# (workflow: Sync OAuth Providers to Supabase), not by this file.
+# Keep providers disabled here unless local secrets are present — Supabase Preview
+# fails when enabled=true without client_id/secret.
 
 [auth]
 site_url = "http://localhost:5173"
 additional_redirect_urls = ["http://localhost:5173/auth/callback"]
 
 [auth.external.google]
-enabled = true
+enabled = false
+client_id = "env(GOOGLE_CLIENT_ID)"
+secret = "env(GOOGLE_CLIENT_SECRET)"
+# Required for Google Identity Services id_token → Supabase (local when enabled)
 skip_nonce_check = true
 
 [auth.external.github]
-enabled = true
+enabled = false
+client_id = "env(GITHUB_CLIENT_ID)"
+secret = "env(GITHUB_CLIENT_SECRET)"
 
 [auth.external.apple]
-enabled = true
+enabled = false
+client_id = "env(APPLE_CLIENT_ID)"
+secret = "env(APPLE_CLIENT_SECRET)"
