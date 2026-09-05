@@ -1,6 +1,7 @@
 import { createBrowserRouter, Navigate } from "react-router";
 import { AppShell } from "./components/AppShell";
 import { ProtectedRoute } from "./components/ProtectedRoute";
+import { ScrollableScreen } from "./components/ScrollableScreen";
 import { hasOAuthCallbackParams } from "./lib/oauthRedirect";
 import { SplashScreen } from "./screens/SplashScreen";
 import { OnboardingScreen } from "./screens/OnboardingScreen";
@@ -80,23 +81,28 @@ export const router = createBrowserRouter([
             path: "/advisor",
             Component: AIAssistantScreen,
           },
+          {
+            path: "/stock/:symbol",
+            Component: StockAnalysisScreen,
+          },
+          {
+            path: "/analysis",
+            Component: StockAnalysisScreen,
+          },
         ],
       },
       {
-        path: "/stock/:symbol",
-        Component: StockAnalysisScreen,
-      },
-      {
-        path: "/analysis",
-        Component: StockAnalysisScreen,
-      },
-      {
-        path: "/add-demo-funds",
-        Component: AddDemoFundsScreen,
-      },
-      {
-        path: "/add-funds",
-        Component: AddDemoFundsScreen,
+        Component: ScrollableScreen,
+        children: [
+          {
+            path: "/add-demo-funds",
+            Component: AddDemoFundsScreen,
+          },
+          {
+            path: "/add-funds",
+            Component: AddDemoFundsScreen,
+          },
+        ],
       },
     ],
   },

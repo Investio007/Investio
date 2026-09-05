@@ -50,9 +50,10 @@ function metricColor(color: CompareMetric["color"]) {
 }
 
 function scoreTextColor(score: number) {
-  if (score >= 70) return "text-[#007A4D]";
-  if (score >= 55) return "text-[#FFB612]";
-  return "text-[#E03A3E]";
+  // Darker tints so mid/low scores stay readable on white/light cards
+  if (score >= 70) return "text-[#006B43]";
+  if (score >= 55) return "text-[#9A6700]";
+  return "text-[#C62828]";
 }
 
 function formatPrice(company: CompareCompany): string {
@@ -130,12 +131,12 @@ export function CompareScreen() {
             <h1 className="text-2xl font-bold text-[#0A1F44]">
               Compare Companies
             </h1>
-            <p className="text-gray-600 mt-2 text-sm leading-relaxed">
+            <p className="text-sm font-medium text-[#0A1F44] mt-2 leading-relaxed">
               Live prices and scores for {companies.length || 8} top companies —
               scroll to compare all.
             </p>
           </div>
-          <div className="flex items-center gap-1 text-xs text-gray-500 shrink-0 mt-1">
+          <div className="flex items-center gap-1 text-xs text-[#0A1F44] shrink-0 mt-1">
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
             {formatUpdatedAt(updatedAt)}
           </div>
@@ -152,7 +153,7 @@ export function CompareScreen() {
         )}
 
         {stale && !loading && (
-          <p className="text-xs text-[#FFB612] text-center">
+          <p className="text-xs font-medium text-[#7A5A00] bg-[#FFB612]/15 rounded-xl px-3 py-2 text-center">
             Some prices may be delayed — showing the latest available data.
           </p>
         )}
@@ -164,7 +165,7 @@ export function CompareScreen() {
                 <Award className="w-5 h-5 text-[#FFB612]" />
               </div>
               <div>
-                <p className="text-xs uppercase tracking-wide text-white/70 mb-1">
+                <p className="text-xs uppercase tracking-wide text-white/85 mb-1">
                   Our long-term pick
                 </p>
                 <h2 className="text-lg font-bold leading-snug">
@@ -181,14 +182,14 @@ export function CompareScreen() {
         {loading && companies.length === 0 ? (
           <Card className="p-6 rounded-3xl shadow-sm border-0">
             <PriceSkeleton />
-            <p className="text-sm text-gray-500 mt-4 text-center">
+            <p className="text-sm font-medium text-[#0A1F44] mt-4 text-center">
               Loading live market data…
             </p>
           </Card>
         ) : (
           <>
             <Card className="p-4 rounded-3xl shadow-sm border-0 overflow-hidden">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3 px-1">
+              <p className="text-xs font-semibold text-[#0A1F44] uppercase tracking-wide mb-3 px-1">
                 Live prices today
               </p>
               <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide -mx-1 px-1">
@@ -206,11 +207,13 @@ export function CompareScreen() {
                     }`}
                   >
                     {company.isWinner && (
-                      <span className="text-[10px] font-bold text-[#007A4D] uppercase">
+                      <span className="text-[10px] font-bold text-[#006B43] uppercase">
                         Top pick
                       </span>
                     )}
-                    <p className="text-xs text-gray-600 truncate">{company.ticker}</p>
+                    <p className="text-xs font-medium text-[#0A1F44] truncate">
+                      {company.ticker}
+                    </p>
                     <p className="text-sm font-bold text-[#0A1F44] truncate">
                       {company.name}
                     </p>
@@ -218,10 +221,10 @@ export function CompareScreen() {
                       {loading ? <PriceSkeleton /> : formatPrice(company)}
                     </p>
                     <div
-                      className={`flex items-center gap-0.5 text-xs font-medium mt-0.5 ${
+                      className={`flex items-center gap-0.5 text-xs font-semibold mt-0.5 ${
                         company.changePositive
-                          ? "text-[#007A4D]"
-                          : "text-[#E03A3E]"
+                          ? "text-[#006B43]"
+                          : "text-[#C62828]"
                       }`}
                     >
                       {company.changePositive ? (
@@ -237,10 +240,10 @@ export function CompareScreen() {
             </Card>
 
             <Card className="p-4 rounded-3xl shadow-sm border-0">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1 px-1">
+              <p className="text-xs font-semibold text-[#0A1F44] uppercase tracking-wide mb-1 px-1">
                 Side-by-side scores
               </p>
-              <p className="text-xs text-gray-500 mb-4 px-1">
+              <p className="text-xs font-medium text-[#0A1F44] mb-4 px-1">
                 Higher is better. Green = good, yellow = okay, red = caution.
               </p>
 
@@ -253,7 +256,7 @@ export function CompareScreen() {
                         <p className="text-sm font-semibold text-[#0A1F44]">
                           {row.label}
                         </p>
-                        <p className="text-xs text-gray-500">{row.hint}</p>
+                        <p className="text-xs text-[#0A1F44]">{row.hint}</p>
                       </div>
                       <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide -mx-1 px-1">
                         {companies.map((company) => {
@@ -266,7 +269,7 @@ export function CompareScreen() {
                                 isBest ? "bg-[#007A4D]/8 ring-1 ring-[#007A4D]/20" : "bg-[#F5F7FA]"
                               }`}
                             >
-                              <p className="text-[10px] text-gray-500 mb-1 truncate">
+                              <p className="text-[10px] font-medium text-[#0A1F44] mb-1 truncate">
                                 {company.ticker}
                               </p>
                               <div className="flex items-center justify-center gap-1 mb-1">
@@ -277,7 +280,9 @@ export function CompareScreen() {
                                   {metric.pct}
                                 </span>
                               </div>
-                              <p className="text-[10px] text-gray-600">{metric.label}</p>
+                              <p className="text-[10px] font-medium text-[#0A1F44]">
+                                {metric.label}
+                              </p>
                             </div>
                           );
                         })}
@@ -298,19 +303,21 @@ export function CompareScreen() {
                 <div className="flex items-start justify-between gap-3 mb-3">
                   <div>
                     <div className="flex flex-wrap items-center gap-2 mb-1">
-                      <span className="text-xs font-bold text-gray-400">
+                      <span className="text-xs font-bold text-[#0A1F44]">
                         #{index + 1}
                       </span>
                       <h3 className="text-lg font-bold text-[#0A1F44]">
                         {company.name}
                       </h3>
                       {company.isWinner && (
-                        <span className="text-[10px] font-bold uppercase tracking-wide text-[#007A4D] bg-[#007A4D]/10 px-2 py-0.5 rounded-full">
+                        <span className="text-[10px] font-bold uppercase tracking-wide text-[#006B43] bg-[#007A4D]/10 px-2 py-0.5 rounded-full">
                           Best long-term
                         </span>
                       )}
                     </div>
-                    <p className="text-sm text-gray-500">{company.ticker}</p>
+                    <p className="text-sm font-medium text-[#0A1F44]">
+                      {company.ticker}
+                    </p>
                     {(company.badges ?? []).length > 0 && (
                       <div className="flex flex-wrap gap-1.5 mt-2">
                         {(company.badges ?? []).map((badge) => (
@@ -325,7 +332,9 @@ export function CompareScreen() {
                     )}
                   </div>
                   <div className="text-right shrink-0">
-                    <p className="text-xs text-gray-500">Long-term score</p>
+                    <p className="text-xs font-medium text-[#0A1F44]">
+                      Long-term score
+                    </p>
                     <p
                       className={`text-2xl font-bold ${scoreTextColor(company.longTermScore ?? 0)}`}
                     >
@@ -336,20 +345,24 @@ export function CompareScreen() {
 
                 <div className="mb-3">
                   <div className="flex items-baseline gap-2 mb-1">
-                    <span className="text-xs text-gray-500">Health score</span>
+                    <span className="text-xs font-medium text-[#0A1F44]">
+                      Health score
+                    </span>
                     <span
                       className={`text-xl font-bold ${scoreTextColor(company.aiScore ?? 0)}`}
                     >
                       {company.aiScore ?? "—"}
                     </span>
-                    <span className="text-xs text-gray-500">/100</span>
+                    <span className="text-xs font-medium text-[#0A1F44]">
+                      /100
+                    </span>
                   </div>
                   <p className="text-sm font-medium text-[#0A1F44]">
                     {company.rating}
                   </p>
                 </div>
 
-                <p className="text-sm text-gray-700 leading-relaxed mb-4">
+                <p className="text-sm text-[#0A1F44] leading-relaxed mb-4">
                   {company.explanation}
                 </p>
 
@@ -379,7 +392,7 @@ export function CompareScreen() {
               {verdict.tips.map((tip) => (
                 <li
                   key={tip}
-                  className="flex items-start gap-2 text-sm text-gray-700 leading-relaxed"
+                  className="flex items-start gap-2 text-sm text-[#0A1F44] leading-relaxed"
                 >
                   <CheckCircle2 className="w-4 h-4 text-[#007A4D] shrink-0 mt-0.5" />
                   {tip}

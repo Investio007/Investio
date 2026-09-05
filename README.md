@@ -31,6 +31,7 @@ Crowth is a mobile-first fintech **education** app for learning how to invest. U
 
 ### Build Portfolio (`/portfolio-builder`)
 - Create multiple named portfolios (demo amount, risk level, investment goal)
+- **Suggested allocation** with % + Rand amounts for Growth / Balanced / Safe (updates with risk & amount)
 - Add companies from a searchable catalog (US mega-caps + global stocks)
 - **Live portfolio performance** — per-holding price, day change %, demo P&L, summary card (gainers/losers, today's %)
 - Tap a holding → stock analysis screen
@@ -48,17 +49,22 @@ Crowth is a mobile-first fintech **education** app for learning how to invest. U
 - **Ollama** when running the local/Railway FastAPI backend
 - Plain-language answers with optional risk labels (Low / Moderate / High)
 - Suggested starter questions
+- Composer sits above bottom nav (no overlap); chat scroll is independent
+- **Profile menu** (top right) — edit display name or permanently delete account
 
 ### Stock Analysis (`/analysis`, `/stock/:symbol`)
 - Live quote + chart snapshot
 - AI traffic-light analysis (growth, profitability, stability, competition)
 - Add to portfolio with picker support
+- Scrollable inside the app shell on all devices
 
 ### Auth & onboarding
 - Splash → onboarding → auth flow
 - Email sign-up / sign-in with **password visibility toggle**
+- **Email confirmation required** before password sign-in (Supabase)
+- Password minimum **8 characters** (app + Supabase Auth)
 - **Forgot password** (`/auth/forgot-password`) and **reset password** (`/auth/reset-password`)
-- Google OAuth (via Supabase) when configured
+- **Google Sign-In** via Google Identity Services on the app origin (`crowthza.app` / localhost) → `signInWithIdToken` (shows **Continue to Crowth**, not `….supabase.co`)
 - **Sign-up legal consent** — Terms, Privacy, Cookies (`/legal/terms`, `/legal/privacy`, `/legal/cookies`)
 - Responsive full-viewport auth layout with safe-area support
 - Cloud sync of demo balance and portfolios when signed in
@@ -68,6 +74,7 @@ Crowth is a mobile-first fintech **education** app for learning how to invest. U
 - Bottom navigation: Home, Portfolio, Compare, AI Advisor
 - Global toast notifications
 - Protected routes redirect to `/auth` when logged out
+- Chat routes use a fixed layout above the nav; other screens use a touch-friendly scroll region
 
 ---
 
@@ -160,7 +167,7 @@ See **[`docs/cloudflare.md`](docs/cloudflare.md)** for deploy steps, secrets, an
 | Local / legacy API | Python 3.12, FastAPI, Uvicorn (Railway) |
 | Market data | Finnhub (primary on Worker); yfinance / Alpha Vantage (FastAPI fallbacks) |
 | AI | Workers AI (production Cloudflare); Ollama (local / Railway) |
-| Auth & cloud | Supabase (profiles, portfolio sync, Google OAuth, password reset) |
+| Auth & cloud | Supabase (profiles, portfolio sync, Google GIS + IdToken, password reset, account delete) |
 | Hosting | **Cloudflare Workers + assets** (primary); Vercel + Railway (legacy) |
 | Domains | Cloudflare Registrar — `crowthza.app` (app, live) |
 | Observability | Sentry (errors), PostHog (analytics), UptimeRobot (uptime) |
@@ -172,16 +179,17 @@ See **[`docs/cloudflare.md`](docs/cloudflare.md)** for deploy steps, secrets, an
 
 ```
 ├── src/app/
-│   ├── screens/          # Route screens (Home, Compare, Portfolio, Auth, Legal, etc.)
-│   ├── components/       # UI, MobileNav, AuthPageLayout, PasswordInput, SignUpLegalConsent
+│   ├── screens/          # Route screens (Home, Compare, Portfolio, Auth, Legal, AI, Stock, etc.)
+│   ├── components/       # UI, MobileNav, AppShell, ProfileDialog, ScrollableScreen, Auth layout
 │   ├── context/          # CrowthContext (portfolios, balance, auth)
 │   ├── hooks/            # useMarketData, usePortfolioQuotes, useAddToPortfolioWithPicker
 │   ├── services/         # marketApi, aiApi, supabaseDb
 │   ├── lib/              # authSessionFromUrl, marketApiBaseUrl, portfolioPerformance
 │   ├── content/          # legalPolicies.ts
 │   └── data/             # assets, countryMarkets, portfolioCatalog
+├── src/lib/              # supabase client, webGoogleAuth, nativeGoogleAuth, analytics
 ├── workers/
-│   ├── api-proxy.ts      # Cloudflare Worker: SPA + /api routes
+│   ├── api-proxy.ts      # Cloudflare Worker: SPA + /api routes + account delete
 │   └── lib/              # Finnhub client, cache, sentiment, Workers AI
 ├── server/
 │   ├── main.py           # FastAPI market + AI API (local dev / Railway legacy)
@@ -190,14 +198,17 @@ See **[`docs/cloudflare.md`](docs/cloudflare.md)** for deploy steps, secrets, an
 │   ├── nixpacks.toml
 │   └── railway.toml      # Railway deploy + healthcheck config
 ├── scripts/
-│   ├── qa-smoke.mjs      # Production smoke tests (22 checks)
-│   └── sync-oauth-to-supabase.mjs
-├── supabase/             # Schema / migrations
-├── public/               # logo.png, icon.svg, favicons, _headers
+│   ├── qa-smoke.mjs      # Production smoke tests
+│   └── sync-oauth-to-supabase.mjs  # OAuth redirects + ensure delete_own_account RPC
+├── supabase/
+│   ├── schema.sql        # Tables, RLS, grants
+│   └── delete_own_account.sql  # Permanent self-delete RPC
+├── public/               # logo.png, logo.svg, favicons, _headers
 ├── docs/
-│   └── cloudflare.md     # Cloudflare deploy, secrets, domains
+│   ├── cloudflare.md     # Cloudflare deploy, secrets, domains
+│   └── auth-oauth-branding.md  # Google GIS + consent branding
 ├── .github/workflows/    # CI/CD pipelines
-├── wrangler.toml         # Cloudflare Worker config
+├── wrangler.toml         # Cloudflare Worker config + crowthza custom domains
 ├── vercel.json           # SPA rewrite + /api proxy to Railway (legacy)
 ├── railway.toml          # Notes only — deploy config lives in server/railway.toml
 ├── TESTING.md            # Manual QA checklist
@@ -246,6 +257,7 @@ Copy `.env.example` to `.env` in the project root and fill in keys.
 |----------|----------|---------|
 | `VITE_SUPABASE_URL` | For auth/sync | Supabase project URL |
 | `VITE_SUPABASE_ANON_KEY` | For auth/sync | Supabase anon (public) key |
+| `VITE_GOOGLE_WEB_CLIENT_ID` | For Google Sign-In | Google **Web** OAuth client ID (GIS + native) |
 | `VITE_MARKET_API_URL` | Local / Android override | `http://localhost:8002` — **omit on Cloudflare & Vercel** (same-origin `/api`) |
 | `VITE_AUTH_REDIRECT_URL` | Optional | Custom OAuth callback (Capacitor / custom domain) |
 | `VITE_AUTH_RESET_REDIRECT_URL` | Optional | Custom password-reset redirect |
@@ -253,6 +265,8 @@ Copy `.env.example` to `.env` in the project root and fill in keys.
 | `VITE_SENTRY_ENVIRONMENT` | Optional | e.g. `production`, `preview` |
 | `VITE_POSTHOG_KEY` | Optional | PostHog project API key (`phc_...`) |
 | `VITE_POSTHOG_HOST` | Optional | Default `https://us.i.posthog.com` |
+| `SUPABASE_ACCESS_TOKEN` | Scripts / CI | Personal access token for Management API (`sbp_…`) |
+| `SUPABASE_PROJECT_REF` | Scripts / CI | e.g. `hqzxlitlibxltvsrqhnj` |
 
 #### Cloudflare Worker secrets (production — **never** commit values)
 
@@ -263,6 +277,8 @@ Set via `npx wrangler secret put <NAME>` or Cloudflare dashboard → Worker `cro
 | `FINNHUB_API_KEY` | Live market quotes & charts |
 | `SUPABASE_URL` | Injected into SPA HTML as `window.__CROWTH_ENV__` |
 | `SUPABASE_ANON_KEY` | Same — enables auth without Vite build vars |
+| `GOOGLE_WEB_CLIENT_ID` | Injected for Google Identity Services on production |
+| `SUPABASE_SERVICE_ROLE_KEY` | Server-only — permanent account delete fallback (`DELETE /api/account`) |
 
 Workers AI uses the `[ai]` binding in `wrangler.toml` (no API key needed).
 
@@ -275,7 +291,7 @@ Workers AI uses the `[ai]` binding in `wrangler.toml` (no API key needed).
 | `OLLAMA_MODEL` | Optional | Default: `gemma3:4b` |
 | `ALPHA_VANTAGE_KEY` | Optional | Fundamentals / chart fallback |
 | `ENVIRONMENT` | Production | Set to `production` on Railway |
-| `CORS_ORIGINS` | Production | `https://investio-wheat.vercel.app` |
+| `CORS_ORIGINS` | Production | e.g. `https://crowthza.app,https://investio-wheat.vercel.app` |
 | `ADMIN_API_KEY` | Optional | Protects cache admin endpoints |
 | `AI_RATE_LIMIT` | Optional | Requests/min per IP for `/api/ai/chat` (default 30) |
 | `MARKET_RATE_LIMIT` | Optional | Requests/min per IP for market GET endpoints (default 120) |
@@ -336,11 +352,16 @@ npm run deploy:cloudflare
 npx wrangler secret put FINNHUB_API_KEY
 npx wrangler secret put SUPABASE_URL
 npx wrangler secret put SUPABASE_ANON_KEY
+npx wrangler secret put GOOGLE_WEB_CLIENT_ID
+npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY
 ```
 
 **Verify:**
 
 ```bash
+curl -I https://crowthza.app/health
+# → HTTP/1.1 200  (UptimeRobot uses HEAD)
+
 curl https://crowthza.app/api/health
 # → {"status":"ok","market_data":{"finnhub":true},"ai":{"provider":"workers-ai","configured":true}}
 ```
@@ -377,15 +398,17 @@ Update `vercel.json` if your Railway URL changes.
 
 ### Uptime monitoring
 
-[UptimeRobot](https://uptimerobot.com) (or similar) can watch:
+[UptimeRobot](https://uptimerobot.com) watches production with **HEAD** requests (supported on Worker `/health`).
 
 | Monitor | URL |
 |---------|-----|
+| Cloudflare API health (primary) | `https://crowthza.app/health` |
 | Cloudflare app | `https://crowthza.app/auth` |
-| Cloudflare API | `https://crowthza.app/api/health` |
-| workers.dev fallback | `https://crowth.investiodev.workers.dev/api/health` |
-| Legacy web | `https://investio-wheat.vercel.app/auth` |
-| Legacy API | `https://investio-production.up.railway.app/api/health` |
+| workers.dev fallback | `https://crowth.investiodev.workers.dev/health` |
+| Legacy web (optional) | `https://investio-wheat.vercel.app/auth` |
+| Legacy API (optional) | `https://investio-production.up.railway.app/api/health` |
+
+GitHub Actions `uptime-check.yml` also pings `crowthza.app` and workers.dev every 5 minutes.
 
 ### Supabase
 
@@ -404,11 +427,14 @@ Update `vercel.json` if your Railway URL changes.
 | `https://investio-wheat.vercel.app/auth/callback` | Legacy Vercel OAuth |
 | `https://investio-wheat.vercel.app/auth/reset-password` | Legacy Vercel reset |
 
-**Automated sync:** Add secrets from [`.github/oauth-secrets.template`](.github/oauth-secrets.template), then run **Actions → Sync OAuth Providers to Supabase**. The sync script registers callback + reset-password URLs for both localhost and production.
+**Automated sync:** Add secrets from [`.github/oauth-secrets.template`](.github/oauth-secrets.template), then run **Actions → Sync OAuth Providers to Supabase**. The sync script registers callback + reset-password URLs and ensures the `delete_own_account` RPC exists.
 
-**Google Cloud Console:** OAuth client redirect URI must be `https://<project-ref>.supabase.co/auth/v1/callback`.
+**Google Cloud Console**
+- Authorized **JavaScript origins:** `http://localhost:5173`, `https://crowthza.app`, `https://www.crowthza.app`, `https://crowth.investiodev.workers.dev`
+- Authorized **redirect URI** (legacy / provider callback): `https://<project-ref>.supabase.co/auth/v1/callback`
+- Branding: App name **Crowth**, logo `public/logo.png` — see **[docs/auth-oauth-branding.md](docs/auth-oauth-branding.md)**
 
-**Google OAuth branding:** Set app name and logo in Google Cloud Console; Supabase custom domain optional for consent-screen branding.
+**Account deletion:** Profile → Delete account calls `delete_own_account` (see `supabase/delete_own_account.sql`). Worker `DELETE /api/account` is a service-role fallback.
 
 ---
 
@@ -418,7 +444,7 @@ The same routes exist on **Cloudflare Worker** (production) and **FastAPI** (loc
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/api/health` | Server status, Finnhub + AI config |
+| `GET` / `HEAD` | `/health`, `/api/health` | Server status (HEAD for uptime monitors) |
 | `GET` | `/api/quote/{symbol}` | Live quote |
 | `GET` | `/api/chart/{symbol}/{period}` | Chart data (`1D`–`1Y`) |
 | `GET` | `/api/snapshot/{symbol}/{period}` | Quote + chart bundle |
@@ -426,6 +452,7 @@ The same routes exist on **Cloudflare Worker** (production) and **FastAPI** (loc
 | `GET` | `/api/compare` | 8-company compare with long-term scores |
 | `GET` | `/api/sentiment/{symbol}` | AI traffic-light analysis |
 | `POST` | `/api/ai/chat` | AI assistant chat |
+| `DELETE` | `/api/account` | Permanently delete signed-in user (service role) |
 
 **FastAPI only** (Railway / local):
 
@@ -441,7 +468,9 @@ The same routes exist on **Cloudflare Worker** (production) and **FastAPI** (loc
 ## Data & persistence
 
 - **Local:** `localStorage` — portfolios and demo balance (works offline)
-- **Cloud:** Supabase `profiles` + `portfolio_items` when signed in (RLS enabled)
+- **Cloud:** Supabase `profiles` + `portfolio_items` when signed in (RLS + `FORCE ROW LEVEL SECURITY`; `anon` has no table grants)
+- **Auth hardening:** email confirmation required; password min length 8; password-change reauthentication; refresh-token rotation. HaveIBeenPwned needs Supabase Pro (not on Free).
+- **Account delete:** `public.delete_own_account()` removes portfolio rows, profile, and `auth.users` for `auth.uid()`
 - **Market cache:** In-memory Worker cache (quotes ~60s, charts ~5m) on Cloudflare; FastAPI cache on Railway/local
 
 ---
@@ -531,7 +560,7 @@ Then check **Sentry → Issues** for the backend project. This route returns 404
 | `backend-ci.yml` | All PRs, `server/**` | Import check, health + cache smoke test |
 | `secrets-scan.yml` | Push / PR | Gitleaks |
 | `sync-oauth-providers.yml` | Manual | Push OAuth + redirect config to Supabase |
-| `uptime-check.yml` | Every 5 min | Cloudflare + legacy Vercel/Railway health |
+| `uptime-check.yml` | Every 5 min | `crowthza.app` + workers.dev health |
 | `supabase-backup.yml` | Weekly (Sunday) | `pg_dump` → GitHub artifact (needs `SUPABASE_DB_URL`) |
 
 Branch protection on `main` requires CI to pass before merge.
@@ -542,12 +571,14 @@ Branch protection on `main` requires CI to pass before merge.
 
 **In place**
 - Supabase auth with PKCE; session handling in `authSessionFromUrl.ts`
-- Row Level Security on `profiles` and `portfolio_items`
+- Google Sign-In via GIS + `signInWithIdToken` (app-origin branding)
+- Row Level Security on `profiles` and `portfolio_items` (`FORCE ROW LEVEL SECURITY`)
+- Self-serve account deletion (`delete_own_account` + optional Worker admin delete)
 - API keys server-side only; Gitleaks in CI
-- CORS restricted in production via `CORS_ORIGINS`
-- AI + public market endpoint IP rate limiting
-- Minimum 8-character passwords on sign-up and reset
-- Vercel security headers (CSP, HSTS) in `vercel.json`; Cloudflare Worker security headers on all responses
+- CORS restricted in production via `CORS_ORIGINS` (legacy FastAPI)
+- AI + public market endpoint IP rate limiting (FastAPI)
+- Minimum 8-character passwords on sign-up and reset; email confirmation required
+- Cloudflare Worker security headers on all responses; Vercel headers in `vercel.json` (legacy)
 - Demo auth bypass disabled in production builds
 - Sentry error boundary + `VITE_SENTRY_DSN` / `SENTRY_DSN` monitoring
 - PostHog analytics with custom product events
@@ -627,13 +658,22 @@ Free Finnhub tier may not include candle data. Charts fall back to synthetic / y
 ### Google OAuth stuck or wrong redirect
 
 - Start sign-in from `/auth` in the **same browser tab**.
-- Use **https://crowthza.app/auth** for production OAuth.
-- Supabase redirect URLs must include your production callback + reset-password URLs.
+- Use **https://crowthza.app/auth** for production.
+- Google **JavaScript origins** must include `https://crowthza.app` and `http://localhost:5173`.
+- Keep Supabase callback `https://<ref>.supabase.co/auth/v1/callback` on the Web client for provider config.
 - Re-run **Actions → Sync OAuth Providers to Supabase** after adding domains.
 
-### Google shows “Continue to supabase.co”
+### Google still shows the old supabase host
 
-Normal unless you configure a Supabase custom auth domain. Set app name and logo in **Google Cloud Console** → OAuth consent screen for “Crowth” branding.
+Web sign-in should use GIS (Continue to **Crowth**). If you still see `….supabase.co`:
+1. Confirm `VITE_GOOGLE_WEB_CLIENT_ID` / Worker `GOOGLE_WEB_CLIENT_ID` is set.
+2. Hard refresh — you should get an in-app Google button, not a full redirect to Supabase.
+3. See **[docs/auth-oauth-branding.md](docs/auth-oauth-branding.md)**.
+
+### Account delete fails
+
+1. Ensure `supabase/delete_own_account.sql` was applied (Sync OAuth workflow or SQL Editor).
+2. Or set Worker secret `SUPABASE_SERVICE_ROLE_KEY` for `DELETE /api/account`.
 
 ### Password reset email link fails
 

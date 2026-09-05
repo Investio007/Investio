@@ -21,12 +21,14 @@ export function AuthScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(false);
   const [oauthLoading, setOauthLoading] = useState<OAuthProvider | null>(null);
   const navigate = useNavigate();
 
   const handleOAuth = async (provider: OAuthProvider) => {
     setError("");
+    setNotice("");
 
     if (!isSupabaseConfigured) {
       setError("Connect Supabase in .env to use social sign in.");
@@ -38,6 +40,7 @@ export function AuthScreen() {
     try {
       const { error: oauthError } = await signInWithOAuth(provider);
       if (oauthError) {
+        if (/cancel/i.test(oauthError.message)) return;
         setError(oauthError.message);
         return;
       }
@@ -52,6 +55,7 @@ export function AuthScreen() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setNotice("");
 
     if (!email || !password) {
       setError("Please fill in all fields.");
@@ -86,9 +90,11 @@ export function AuthScreen() {
           return;
         }
         if (data.user && !data.session) {
-          setError(
+          setNotice(
             "Check your email to confirm your account, then sign in.",
           );
+          setIsLogin(true);
+          setPassword("");
           return;
         }
       }
@@ -131,6 +137,11 @@ export function AuthScreen() {
       {error && (
         <div style={{ color: "#E03A3E", fontSize: 12, marginBottom: 8 }}>
           {error}
+        </div>
+      )}
+      {notice && (
+        <div className="text-xs text-[#0A1F44] bg-[#0A1F44]/8 rounded-xl p-3 mb-4">
+          {notice}
         </div>
       )}
 
@@ -220,6 +231,7 @@ export function AuthScreen() {
             onClick={() => {
               setIsLogin(!isLogin);
               setError("");
+              setNotice("");
             }}
             className="text-gray-600 hover:text-[#0A1F44]"
             disabled={loading || oauthLoading !== null}

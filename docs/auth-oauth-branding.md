@@ -1,24 +1,48 @@
 # Google OAuth consent screen branding
 
-Users see **"Continue to supabase.co"** until you brand the Google OAuth consent screen. This is a one-time Google Cloud Console setup (about 15 minutes).
+## Free fix (recommended — no Supabase Pro)
 
-## Steps
+Crowth uses **Google Identity Services** on the app origin (`crowthza.app` / `localhost`), then `supabase.auth.signInWithIdToken`.  
+The account chooser is tied to **your site**, not `….supabase.co`.
 
-1. Open [Google Cloud Console](https://console.cloud.google.com/) → select the project linked to your OAuth client.
-2. Go to **APIs & Services** → **OAuth consent screen**.
-3. Set **App name** to `Crowth`.
-4. Upload **App logo** (`public/logo.png` from this repo).
-5. Set **User support email** and **Developer contact email**.
-6. Add **App domain** (optional but recommended):
-   - Application home page: `https://investio-wheat.vercel.app`
-   - Privacy policy: `https://investio-wheat.vercel.app/legal/privacy`
-   - Terms of service: `https://investio-wheat.vercel.app/legal/terms`
-7. Save and submit for verification if Google prompts (testing mode works for your own test users without full verification).
+### Google Cloud → Credentials → Web client
 
-## OAuth client (already configured)
+**Authorized JavaScript origins** (required):
 
-- **Authorized redirect URI:** `https://YOUR-PROJECT-REF.supabase.co/auth/v1/callback`
-- Credentials sync via **Actions → Sync OAuth Providers to Supabase** (see `.github/oauth-secrets.template`).
+```text
+http://localhost:5173
+https://crowthza.app
+https://www.crowthza.app
+https://crowth.investiodev.workers.dev
+```
+
+Keep the existing Supabase callback under **Authorized redirect URIs** for Apple / legacy flows:
+
+```text
+https://hqzxlitlibxltvsrqhnj.supabase.co/auth/v1/callback
+```
+
+### Branding (optional but good)
+
+[Google Auth Platform → Branding](https://console.cloud.google.com/auth/branding):
+
+- App name: `Crowth`
+- Logo: `public/logo.png`
+- Home / Privacy / Terms: `https://crowthza.app` (+ `/legal/privacy`, `/legal/terms`)
+- Authorized domains: `crowthza.app` (and `supabase.co` if still listed)
+
+### Env
+
+- Local: `VITE_GOOGLE_WEB_CLIENT_ID` in `.env` (Web client ID)
+- Cloudflare: `npx wrangler secret put GOOGLE_WEB_CLIENT_ID` (same value; injected into the SPA)
+
+---
+
+## Paid option (Supabase custom domain)
+
+Only needed if you want Auth API URLs on `auth.crowthza.app`. Requires Supabase Pro + custom domain add-on. See [Supabase custom domains](https://supabase.com/docs/guides/platform/custom-domains).
+
+---
 
 ## Apple Sign In (optional)
 
@@ -26,21 +50,9 @@ Users see **"Continue to supabase.co"** until you brand the Google OAuth consent
 2. Create a **Services ID** and **Sign in with Apple** key (`.p8`).
 3. Add GitHub secrets: `APPLE_CLIENT_ID`, `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY`.
 4. Run **Sync OAuth Providers to Supabase**.
-5. Set `VITE_APPLE_SIGN_IN_ENABLED=true` on Vercel and redeploy.
+5. Set `VITE_APPLE_SIGN_IN_ENABLED=true` and redeploy.
 
 ## Android / Capacitor OAuth
 
-Native Google Sign-In uses package **`com.crowth.app`**. In Google Cloud, create an **Android** OAuth client with that package name and your signing **SHA-1**.
-
-`VITE_GOOGLE_WEB_CLIENT_ID` must be the **Web** client ID (same one configured for Supabase).
-
-After browser-based OAuth fallback, Supabase redirects to `https://localhost/auth/callback`.
-
-**Supabase → Authentication → URL configuration** must include:
-
-```text
-https://localhost/auth/callback
-https://localhost/auth/reset-password
-```
-
-Appflow **Production** environment uses the same redirect URLs (`VITE_AUTH_REDIRECT_URL`, etc.).
+Native Google Sign-In uses package **`com.crowth.app`**. Create an **Android** OAuth client with that package + signing **SHA-1**.  
+`VITE_GOOGLE_WEB_CLIENT_ID` must remain the **Web** client ID.

@@ -6,6 +6,7 @@ declare global {
     __CROWTH_ENV__?: {
       VITE_SUPABASE_URL?: string;
       VITE_SUPABASE_ANON_KEY?: string;
+      VITE_GOOGLE_WEB_CLIENT_ID?: string;
     };
   }
 }

@@ -148,7 +148,7 @@ export function StockAnalysisScreen() {
   const headerRatingScore = sentiment?.aiScore ?? stock.aiScore;
 
   return (
-    <div className="min-h-full bg-[#F5F7FA] pb-8">
+    <div className="min-h-full bg-[#F5F7FA] pb-10">
       {/* Header */}
       <div className="bg-white px-6 screen-header pb-6 rounded-b-3xl shadow-sm mb-6">
         <button
@@ -279,7 +279,7 @@ export function StockAnalysisScreen() {
         <Button
           type="button"
           onClick={() => requestAdd(stock)}
-          className="w-full bg-[#0A1F44] hover:bg-[#0A1F44]/90 text-white h-14 rounded-2xl text-lg"
+          className="w-full bg-[#0A1F44] hover:bg-[#0A1F44]/90 text-white h-14 rounded-2xl text-lg mb-4"
         >
           Add to Demo Portfolio
         </Button>
