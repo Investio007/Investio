@@ -22,6 +22,10 @@ export interface Env {
   SUPABASE_URL?: string;
   /** Public anon key — injected into HTML for the SPA */
   SUPABASE_ANON_KEY?: string;
+  /** Public Google Web client ID — GIS sign-in on the app origin */
+  GOOGLE_WEB_CLIENT_ID?: string;
+  /** Service role for account deletion (never expose to the client) */
+  SUPABASE_SERVICE_ROLE_KEY?: string;
   /** Optional fallback proxy if native handlers fail (legacy Railway). */
   MARKET_API_ORIGIN?: string;
 }
@@ -509,6 +513,55 @@ async function handleAiChat(request: Request, env: Env): Promise<Response> {
   }
 }
 
+async function handleDeleteAccount(request: Request, env: Env): Promise<Response> {
+  const supabaseUrl = (env.SUPABASE_URL || "").trim().replace(/\/+$/, "");
+  const serviceKey = (env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+  const anonKey = (env.SUPABASE_ANON_KEY || "").trim();
+  if (!supabaseUrl || !serviceKey) {
+    return json(
+      {
+        detail:
+          "Account deletion is not configured. Add SUPABASE_SERVICE_ROLE_KEY to the Worker.",
+      },
+      503,
+    );
+  }
+
+  const authHeader = request.headers.get("Authorization") || "";
+  const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+  if (!token) return json({ detail: "Missing authorization" }, 401);
+
+  const verifyKey = anonKey || serviceKey;
+  const userRes = await fetch(`${supabaseUrl}/auth/v1/user`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      apikey: verifyKey,
+    },
+  });
+  if (!userRes.ok) {
+    return json({ detail: "Invalid or expired session" }, 401);
+  }
+  const user = (await userRes.json()) as { id?: string };
+  if (!user.id) return json({ detail: "Invalid user" }, 401);
+
+  const delRes = await fetch(`${supabaseUrl}/auth/v1/admin/users/${user.id}`, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${serviceKey}`,
+      apikey: serviceKey,
+    },
+  });
+  if (!delRes.ok) {
+    const detail = await delRes.text();
+    return json(
+      { detail: detail || "Failed to delete account" },
+      delRes.status >= 400 && delRes.status < 600 ? delRes.status : 502,
+    );
+  }
+
+  return json({ status: "deleted" });
+}
+
 async function handleApi(request: Request, env: Env, url: URL): Promise<Response> {
   const path = url.pathname.replace(/\/+$/, "") || "/";
   const method = request.method.toUpperCase();
@@ -519,14 +572,28 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
         status: 204,
         headers: {
           "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+          "Access-Control-Allow-Methods": "GET, HEAD, POST, DELETE, OPTIONS",
           "Access-Control-Allow-Headers": "Content-Type, Authorization",
         },
       }),
     );
   }
 
-  if (method === "GET" && (path === "/api/health" || path === "/health")) {
+  if (
+    (method === "GET" || method === "HEAD") &&
+    (path === "/api/health" || path === "/health")
+  ) {
+    if (method === "HEAD") {
+      return withSecurityHeaders(
+        new Response(null, {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json",
+            "Cache-Control": "no-store",
+          },
+        }),
+      );
+    }
     return json({
       status: "ok",
       timestamp: new Date().toISOString(),
@@ -543,6 +610,10 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
 
   if (method === "POST" && path === "/api/ai/chat") {
     return handleAiChat(request, env);
+  }
+
+  if (method === "DELETE" && path === "/api/account") {
+    return handleDeleteAccount(request, env);
   }
 
   if (method === "GET" && path === "/api/compare") return handleCompare(env);
@@ -583,6 +654,7 @@ async function serveAssets(request: Request, env: Env): Promise<Response> {
 
   const supabaseUrl = (env.SUPABASE_URL || "").trim();
   const supabaseAnonKey = (env.SUPABASE_ANON_KEY || "").trim();
+  const googleWebClientId = (env.GOOGLE_WEB_CLIENT_ID || "").trim();
   if (!supabaseUrl || !supabaseAnonKey) {
     return withSecurityHeaders(assetResponse);
   }
@@ -591,6 +663,9 @@ async function serveAssets(request: Request, env: Env): Promise<Response> {
   const boot = `<script>window.__CROWTH_ENV__=${JSON.stringify({
     VITE_SUPABASE_URL: supabaseUrl,
     VITE_SUPABASE_ANON_KEY: supabaseAnonKey,
+    ...(googleWebClientId
+      ? { VITE_GOOGLE_WEB_CLIENT_ID: googleWebClientId }
+      : {}),
   })};</script>`;
   const patched = html.includes("</head>")
     ? html.replace("</head>", `${boot}</head>`)

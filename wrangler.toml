@@ -28,6 +28,8 @@ binding = "AI"
 #   npx wrangler secret put FINNHUB_API_KEY
 #   npx wrangler secret put SUPABASE_URL
 #   npx wrangler secret put SUPABASE_ANON_KEY
+#   npx wrangler secret put GOOGLE_WEB_CLIENT_ID
+#   npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY
 #
 # Optional legacy Railway fallback (unused when native API is live):
 #   MARKET_API_ORIGIN

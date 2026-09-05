@@ -3,12 +3,15 @@ import type { CrowthAsset } from "../data/assets";
 import type { PortfoliosStore } from "../types/portfolio";
 import { migrateLegacyPortfolio } from "../types/portfolio";
 import { getAuthRedirectUrl, getPasswordResetRedirectUrl, isSupabaseConfigured, supabase } from "../../lib/supabase";
+import { getMarketApiBaseUrl } from "../lib/marketApiBaseUrl";
 import { isCapacitorNative } from "../../lib/capacitorPlatform";
 import { signInWithOAuthNative } from "../../lib/mobileOAuth";
 import {
+  getGoogleWebClientId,
   isNativeGoogleAuthAvailable,
   signInWithGoogleNative,
 } from "../../lib/nativeGoogleAuth";
+import { signInWithGoogleWeb } from "../../lib/webGoogleAuth";
 
 export type PortfolioConfig = {
   amount: number;
@@ -164,6 +167,12 @@ export async function signInWithOAuth(provider: OAuthProvider) {
     return signInWithOAuthNative(client, provider);
   }
 
+  // Web Google: GIS on the app origin so the chooser shows crowthza.app / localhost
+  // instead of …supabase.co (no paid Supabase custom domain required).
+  if (provider === "google" && getGoogleWebClientId()) {
+    return signInWithGoogleWeb(client);
+  }
+
   return client.auth.signInWithOAuth({
     provider,
     options: {
@@ -175,6 +184,73 @@ export async function signInWithOAuth(provider: OAuthProvider) {
 export async function signOutUser() {
   const client = requireClient();
   return client.auth.signOut();
+}
+
+export async function updateUserDisplayName(fullName: string) {
+  const client = requireClient();
+  return client.auth.updateUser({
+    data: {
+      full_name: fullName,
+      name: fullName,
+      display_name: fullName,
+    },
+  });
+}
+
+/** Permanently deletes the signed-in user (Auth + demo data). */
+export async function deleteUserAccount(): Promise<{
+  error: { message: string } | null;
+}> {
+  const client = requireClient();
+  const {
+    data: { session },
+  } = await client.auth.getSession();
+  if (!session?.access_token) {
+    return { error: { message: "You must be signed in to delete your account." } };
+  }
+
+  // Preferred: Postgres security-definer RPC (no service role on the Worker).
+  const { error: rpcError } = await client.rpc("delete_own_account");
+  if (!rpcError) {
+    return { error: null };
+  }
+
+  // Fallback: clear rows then Worker admin delete (needs SUPABASE_SERVICE_ROLE_KEY).
+  const userId = session.user.id;
+  await client.from("portfolio_items").delete().eq("user_id", userId);
+  await client.from("profiles").delete().eq("id", userId);
+
+  const base = getMarketApiBaseUrl();
+  try {
+    const res = await fetch(`${base}/api/account`, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (res.ok) return { error: null };
+
+    let message =
+      rpcError.message ||
+      "Could not delete account. Ask an admin to run supabase/delete_own_account.sql.";
+    try {
+      const body = (await res.json()) as { detail?: string };
+      if (body.detail) message = body.detail;
+    } catch {
+      /* ignore */
+    }
+    return { error: { message } };
+  } catch {
+    return {
+      error: {
+        message:
+          rpcError.message ||
+          "Could not delete account. Run supabase/delete_own_account.sql in the SQL editor.",
+      },
+    };
+  }
 }
 
 export async function requestPasswordReset(email: string) {
