@@ -15,6 +15,9 @@ import { Button } from "../components/ui/button";
 import { useCompare } from "../hooks/useMarketData";
 import type { CompareCompany, CompareMetric } from "../services/marketApi";
 import PriceSkeleton from "../components/PriceSkeleton";
+import { openAssetAnalysis, buildMarketAsset } from "../lib/assetAnalysisNav";
+import { formatMarketPrice } from "../lib/formatMarketPrice";
+import { asPlainParagraph } from "../lib/plainEnglish";
 
 const METRIC_ROWS: {
   key: keyof CompareCompany["analysis"];
@@ -57,12 +60,7 @@ function scoreTextColor(score: number) {
 }
 
 function formatPrice(company: CompareCompany): string {
-  if (company.price == null) return "—";
-  const prefix = company.currency === "USD" ? "$" : `${company.currency} `;
-  return `${prefix}${company.price.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
+  return formatMarketPrice(company.price, company.currency, company.ticker);
 }
 
 function formatChange(company: CompareCompany): string {
@@ -197,9 +195,26 @@ export function CompareScreen() {
                   <button
                     key={company.id}
                     type="button"
-                    onClick={() =>
-                      navigate("/analysis", { state: { assetId: company.id } })
-                    }
+                    onClick={() => {
+                      const asset = buildMarketAsset({
+                        id: company.id,
+                        ticker: company.ticker,
+                        name: company.name,
+                        price: company.price,
+                        currency: company.currency ?? "ZAR",
+                        changePercent: company.changePercent,
+                        changePositive: company.changePositive,
+                        aiScore: company.aiScore,
+                        rating: company.rating,
+                        explanation: company.explanation,
+                      });
+                      openAssetAnalysis(navigate, {
+                        id: asset.id,
+                        ticker: asset.ticker,
+                        name: asset.name,
+                        asset,
+                      });
+                    }}
                     className={`min-w-[118px] shrink-0 rounded-2xl p-3 text-left transition-all ${
                       company.isWinner
                         ? "bg-[#007A4D]/10 ring-2 ring-[#007A4D]/30"
@@ -363,15 +378,32 @@ export function CompareScreen() {
                 </div>
 
                 <p className="text-sm text-[#0A1F44] leading-relaxed mb-4">
-                  {company.explanation}
+                  {asPlainParagraph(company.explanation)}
                 </p>
 
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() =>
-                    navigate("/analysis", { state: { assetId: company.id } })
-                  }
+                  onClick={() => {
+                    const asset = buildMarketAsset({
+                      id: company.id,
+                      ticker: company.ticker,
+                      name: company.name,
+                      price: company.price,
+                      currency: company.currency ?? "ZAR",
+                      changePercent: company.changePercent,
+                      changePositive: company.changePositive,
+                      aiScore: company.aiScore,
+                      rating: company.rating,
+                      explanation: company.explanation,
+                    });
+                    openAssetAnalysis(navigate, {
+                      id: asset.id,
+                      ticker: asset.ticker,
+                      name: asset.name,
+                      asset,
+                    });
+                  }}
                   className="w-full h-11 rounded-2xl border-[#0A1F44]/15 text-[#0A1F44]"
                 >
                   See full analysis

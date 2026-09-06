@@ -6,3 +6,5 @@ pandas
 python-dotenv==1.0.1
 requests
 alpha_vantage
+numpy>=1.24
+scipy>=1.10

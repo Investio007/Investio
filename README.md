@@ -1,6 +1,6 @@
 # Crowth
 
-Crowth is a mobile-first fintech **education** app for learning how to invest. Users explore live market data, compare companies, build demo portfolios with performance tracking, and chat with an AI assistant — on web and Android (Capacitor).
+Crowth is a mobile-first fintech **education** app for learning how to invest (South Africa–focused). Users explore live market data in **rand (ZAR)**, compare companies, build demo portfolios with performance tracking, and chat with an AI assistant — on web and Android (Capacitor).
 
 **Design origin:** [Fintech Mobile App Prototype (Figma)](https://www.figma.com/design/1bz8GTMOZQExoTqyYuBSbw/Fintech-Mobile-App-Prototype)
 
@@ -21,11 +21,13 @@ Crowth is a mobile-first fintech **education** app for learning how to invest. U
 ## Features
 
 ### Home (`/home`)
-- Demo portfolio value card with simulated daily change
+- Demo portfolio value card with **live today’s P&L** from holdings (honest empty / unavailable states — no hardcoded fake %)
 - **Country market browser** — 10 markets (US, China, Japan, India, UK, France, Hong Kong, Canada, Germany, South Korea) with per-country stock lists
-- Live price charts (1D / 1W / 1M / 6M / 1Y) via Finnhub with fallbacks
-- **AI Market Insights** — top 20 live performers ranked by today's change, with AI score, rating, and prediction
+- Live price charts (1D / 1W / 1M / 6M / 1Y) via Finnhub; synthetic trend fallback when candles are empty
+- Prices shown in **South African rand (ZAR)** — Worker auto-converts from listing currency (USD, etc.)
+- **AI Market Insights** — top 20 live performers ranked by today's change (stocks only; ETFs excluded), with today’s move score, rating, and plain-English prediction
 - **Add to Portfolio** from insights with portfolio picker
+- Asset “View Details” always opens the **correct stock** (no silent fallback to the wrong asset)
 - Quick links to Build Portfolio and Compare
 - Add demo funds (`+` → `/add-funds`)
 
@@ -33,30 +35,33 @@ Crowth is a mobile-first fintech **education** app for learning how to invest. U
 - Create multiple named portfolios (demo amount, risk level, investment goal)
 - **Suggested allocation** with % + Rand amounts for Growth / Balanced / Safe (updates with risk & amount)
 - Add companies from a searchable catalog (US mega-caps + global stocks)
-- **Live portfolio performance** — per-holding price, day change %, demo P&L, summary card (gainers/losers, today's %)
-- Tap a holding → stock analysis screen
+- **Live portfolio performance** — per-holding ZAR price, day change %, demo P&L, summary card (gainers/losers, today's %)
+- Tap a holding → stock analysis screen (`/stock/:symbol`)
 - Delete portfolio confirmation dialog
 - Data persists in `localStorage` and syncs to Supabase when signed in
 
 ### Compare (`/compare`)
 - Side-by-side comparison of **8 companies:** Apple, Microsoft, Alphabet, NVIDIA, Amazon, Meta, Tesla, Netflix
-- Live prices with auto-refresh (~60s)
+- Live ZAR prices with auto-refresh (~60s)
 - Long-term scores (growth, profit, stability, news mood)
-- AI long-term pick with beginner tips
+- AI long-term pick with beginner plain-English tips (short Grade-9 style copy)
 
 ### AI Advisor (`/ai-assistant`, `/advisor`)
 - Chat UI powered by **Cloudflare Workers AI** in production (Llama 3.3)
 - **Ollama** when running the local/Railway FastAPI backend
-- Plain-language answers with optional risk labels (Low / Moderate / High)
+- Plain-language answers (beginner English) with optional risk labels (Low / Moderate / High)
 - Suggested starter questions
 - Composer sits above bottom nav (no overlap); chat scroll is independent
 - **Profile menu** (top right) — edit display name or permanently delete account
 
-### Stock Analysis (`/analysis`, `/stock/:symbol`)
-- Live quote + chart snapshot
+### Stock Analysis (`/stock/:symbol`)
+- Live quote + chart snapshot (ZAR); surfaces quote errors when live data is unavailable
+- **Today’s move score** aligned with Home insights; longer-term actuarial risk score shown separately when it differs
+- Simple Explanation in short plain English (max ~5 sentences)
 - AI traffic-light analysis (growth, profitability, stability, competition)
+- Unknown / unresolved symbols show **Asset not found** (never falls back to another stock)
 - Add to portfolio with picker support
-- Scrollable inside the app shell on all devices
+- `/analysis` (no symbol) redirects to `/home`
 
 ### Auth & onboarding
 - Splash → onboarding → auth flow
@@ -144,6 +149,14 @@ flowchart TB
 3. **Legacy Vercel:** Same-origin `/api/*` via `vercel.json` proxy to Railway.
 4. **Android (Appflow):** Can override `VITE_MARKET_API_URL` to Railway or Cloudflare URL.
 
+**Market data behaviour (Worker)**
+
+- Quotes, charts, insights, compare, and snapshots return **display currency `ZAR`** with optional `currencyNative` / `priceNative` / FX metadata.
+- Listing currency follows the exchange listing (e.g. US ADRs → USD), not Finnhub domicile alone.
+- Unavailable quotes return **HTTP 503** with `available: false` (clients must not treat empty prices as live).
+- Empty Finnhub candles → synthetic chart from the last good quote (never a blank chart when a price exists).
+- Insights prefer a full cached board (≥15 names) over a thin cold rebuild under Finnhub rate limits.
+
 **Domain plan (Cloudflare Registrar)**
 
 | Domain | Role |
@@ -165,8 +178,8 @@ See **[`docs/cloudflare.md`](docs/cloudflare.md)** for deploy steps, secrets, an
 | Mobile | Capacitor (Android), Ionic Appflow |
 | Production API | Cloudflare Worker (TypeScript) — Finnhub + Workers AI |
 | Local / legacy API | Python 3.12, FastAPI, Uvicorn (Railway) |
-| Market data | Finnhub (primary on Worker); yfinance / Alpha Vantage (FastAPI fallbacks) |
-| AI | Workers AI (production Cloudflare); Ollama (local / Railway) |
+| Market data | Finnhub (primary on Worker) + FX → ZAR; yfinance / Alpha Vantage (FastAPI fallbacks) |
+| AI | Workers AI (production Cloudflare); Ollama (local / Railway); beginner plain-English copy |
 | Auth & cloud | Supabase (profiles, portfolio sync, Google GIS + IdToken, password reset, account delete) |
 | Hosting | **Cloudflare Workers + assets** (primary); Vercel + Railway (legacy) |
 | Domains | Cloudflare Registrar — `crowthza.app` (app, live) |
@@ -184,13 +197,13 @@ See **[`docs/cloudflare.md`](docs/cloudflare.md)** for deploy steps, secrets, an
 │   ├── context/          # CrowthContext (portfolios, balance, auth)
 │   ├── hooks/            # useMarketData, usePortfolioQuotes, useAddToPortfolioWithPicker
 │   ├── services/         # marketApi, aiApi, supabaseDb
-│   ├── lib/              # authSessionFromUrl, marketApiBaseUrl, portfolioPerformance
+│   ├── lib/              # assetAnalysisNav, formatMarketPrice, plainEnglish, portfolioPerformance, …
 │   ├── content/          # legalPolicies.ts
-│   └── data/             # assets, countryMarkets, portfolioCatalog
+│   └── data/             # assets, countryMarkets, portfolioCatalog (resolveAsset)
 ├── src/lib/              # supabase client, webGoogleAuth, nativeGoogleAuth, analytics
 ├── workers/
 │   ├── api-proxy.ts      # Cloudflare Worker: SPA + /api routes + account delete
-│   └── lib/              # Finnhub client, cache, sentiment, Workers AI
+│   └── lib/              # finnhub, fx (ZAR), symbols, cache, actuarial, sentiment, ai
 ├── server/
 │   ├── main.py           # FastAPI market + AI API (local dev / Railway legacy)
 │   ├── sentry_init.py    # Sentry init (skips invalid DSN)
@@ -199,6 +212,8 @@ See **[`docs/cloudflare.md`](docs/cloudflare.md)** for deploy steps, secrets, an
 │   └── railway.toml      # Railway deploy + healthcheck config
 ├── scripts/
 │   ├── qa-smoke.mjs      # Production smoke tests
+│   ├── assert-asset-analysis-guard.mjs  # Prevents silent wrong-stock fallback
+│   ├── e2e-insights.mjs  # Top-20 insights integrity (count, no ETF, ZAR path)
 │   └── sync-oauth-to-supabase.mjs  # OAuth redirects + ensure delete_own_account RPC
 ├── supabase/
 │   ├── schema.sql        # Tables, RLS, grants
@@ -207,6 +222,7 @@ See **[`docs/cloudflare.md`](docs/cloudflare.md)** for deploy steps, secrets, an
 ├── docs/
 │   ├── cloudflare.md     # Cloudflare deploy, secrets, domains
 │   └── auth-oauth-branding.md  # Google GIS + consent branding
+├── .cursor/rules/        # Agent rules (e.g. plain-english.mdc)
 ├── .github/workflows/    # CI/CD pipelines
 ├── wrangler.toml         # Cloudflare Worker config + crowthza custom domains
 ├── vercel.json           # SPA rewrite + /api proxy to Railway (legacy)
@@ -327,10 +343,12 @@ Vite proxies `/api/*` to port **8002** in development.
 | `npm run typecheck` | TypeScript check |
 | `npm run build` | Production frontend build |
 | `npm run preview` | Preview production build |
-| `npm run qa` | typecheck + build + production smoke tests |
-| `npm run qa:smoke` | 22 automated checks against production |
+| `npm run qa` | typecheck + asset-nav guard + build + production smoke tests |
+| `npm run qa:smoke` | Automated checks against production |
+| `npm run qa:asset-nav` | Assert no silent `assets[0]` / wrong-stock analysis fallback |
 | `npm run sync:oauth` | Sync OAuth + redirect URLs to Supabase |
 | `npm run deploy:cloudflare` | Build + `wrangler deploy` to Worker `crowth` |
+| `node scripts/e2e-insights.mjs` | Multi-run Top 20 insights check (live production) |
 | `docker compose up api` | Run backend in Docker (port 8002) |
 | `npm run build:android` | Build + Capacitor sync for Android |
 
@@ -440,17 +458,19 @@ GitHub Actions `uptime-check.yml` also pings `crowthza.app` and workers.dev ever
 
 ## API endpoints
 
-The same routes exist on **Cloudflare Worker** (production) and **FastAPI** (local dev / Railway legacy).
+The same routes exist on **Cloudflare Worker** (production) and **FastAPI** (local dev / Railway legacy). On the Worker, money fields are returned in **ZAR** unless noted.
 
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` / `HEAD` | `/health`, `/api/health` | Server status (HEAD for uptime monitors) |
-| `GET` | `/api/quote/{symbol}` | Live quote |
-| `GET` | `/api/chart/{symbol}/{period}` | Chart data (`1D`–`1Y`) |
+| `GET` | `/api/quote/{symbol}` | Live ZAR quote (`available`, `currencyNative`, FX meta). **503** if unavailable |
+| `GET` | `/api/chart/{symbol}/{period}` | Chart data (`1D`–`1Y`); synthetic fallback when candles missing |
 | `GET` | `/api/snapshot/{symbol}/{period}` | Quote + chart bundle |
-| `GET` | `/api/insights` | Top 20 live performers + AI insights |
-| `GET` | `/api/compare` | 8-company compare with long-term scores |
+| `GET` | `/api/insights` | Top 20 live performers + today’s-move AI insights (ZAR) |
+| `GET` | `/api/compare` | 8-company compare with long-term scores (ZAR) |
+| `GET` | `/api/fx` | USD→ZAR (and related) FX rates used for conversion |
 | `GET` | `/api/sentiment/{symbol}` | AI traffic-light analysis |
+| `GET` | `/api/actuarial/{symbol}` | Longer-term risk score (`available: false` when not enough history) |
 | `POST` | `/api/ai/chat` | AI assistant chat |
 | `DELETE` | `/api/account` | Permanently delete signed-in user (service role) |
 
@@ -483,13 +503,19 @@ The same routes exist on **Cloudflare Worker** (production) and **FastAPI** (loc
 npm run qa
 ```
 
-`scripts/qa-smoke.mjs` checks production routes, API health, quotes, insights, compare, charts, CORS, and that no server secrets appear in the build output.
+This runs `typecheck`, `qa:asset-nav`, `build`, and `qa:smoke`.
+
+| Script | What it checks |
+|--------|----------------|
+| `qa:smoke` | Production routes, API health, quotes, insights, compare, charts, CORS, no secrets in build |
+| `qa:asset-nav` | Analysis navigation never silently opens the wrong stock (`assets[0]` fallback banned) |
+| `e2e-insights.mjs` | Top 20 board stays full across runs; no AI Technology ETF; healthy source/cache |
 
 ### Manual checklist
 
 See **[TESTING.md](TESTING.md)** for the full pre-release checklist (auth, responsive layout, portfolio, compare, AI advisor, production sign-off).
 
-**v0.1 status:** Cloudflare production live at https://crowthza.app (API, Workers AI, Supabase auth). Legacy Vercel + Railway still available.
+**v0.1 status:** Cloudflare production live at https://crowthza.app (ZAR market path, Workers AI, Supabase auth). Legacy Vercel + Railway still available.
 
 See **[docs/crowth-live-status.html](docs/crowth-live-status.html)** for a visual stack completion dashboard (open in browser).
 
@@ -578,7 +604,7 @@ Branch protection on `main` requires CI to pass before merge.
 - CORS restricted in production via `CORS_ORIGINS` (legacy FastAPI)
 - AI + public market endpoint IP rate limiting (FastAPI)
 - Minimum 8-character passwords on sign-up and reset; email confirmation required
-- Cloudflare Worker security headers on all responses; Vercel headers in `vercel.json` (legacy)
+- Cloudflare Worker security headers on all responses (CSP with per-request nonce for HTML boot script, HSTS, X-Frame-Options DENY, etc.); Vercel headers in `vercel.json` (legacy)
 - Demo auth bypass disabled in production builds
 - Sentry error boundary + `VITE_SENTRY_DSN` / `SENTRY_DSN` monitoring
 - PostHog analytics with custom product events
@@ -637,6 +663,12 @@ Native Google Sign-In requires an Android OAuth client in Google Cloud with pack
    - **Trailing slash:** `VITE_MARKET_API_URL` must not end with `/`
    - **Wrong URL:** Leave `VITE_MARKET_API_URL` unset on Cloudflare/Vercel (same-origin `/api`)
 4. Hard refresh the browser (Ctrl+Shift+R).
+5. Quote failures should show **Live price unavailable** (HTTP 503) — not a fake `R0` / empty success.
+6. Thin Top 20: wait for cache warm-up, or run `node scripts/e2e-insights.mjs`. Worker serves last full board when a cold rebuild is thin.
+
+### Wrong stock opens from Home / country list
+
+Analysis must use `openAssetAnalysis` + `resolveAsset`. Run `npm run qa:asset-nav`. Country-only listings are registered as stubs so Baidu (etc.) never fall through to another ticker.
 
 ### Backend port conflicts (Windows)
 
@@ -646,9 +678,9 @@ Get-NetTCPConnection -LocalPort 8002 -ErrorAction SilentlyContinue |
 npm run dev:all
 ```
 
-### Finnhub 403 on charts
+### Finnhub 403 / empty charts
 
-Free Finnhub tier may not include candle data. Charts fall back to synthetic / yfinance / Alpha Vantage.
+Free Finnhub tier may not include candle data or may rate-limit. On Cloudflare, charts fall back to a **synthetic** series from the live quote when candles are missing. Local/Railway FastAPI can also fall back to yfinance / Alpha Vantage.
 
 ### AI not responding
 

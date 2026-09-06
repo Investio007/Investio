@@ -1,18 +1,10 @@
 import type { QuoteData } from "../services/marketApi";
 import type { CrowthAsset } from "../data/assets";
+import { formatMarketPrice } from "./formatMarketPrice";
 
 export function formatQuotePrice(quote: QuoteData | undefined | null): string {
   if (quote?.price == null) return "—";
-  const prefix =
-    quote.currency === "USD"
-      ? "$"
-      : quote.currency === "ZAR"
-        ? "R"
-        : `${quote.currency} `;
-  return `${prefix}${quote.price.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
+  return formatMarketPrice(quote.price, quote.currency, quote.ticker);
 }
 
 export function formatRand(amount: number): string {

@@ -2,7 +2,6 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
-import { Label } from "../components/ui/label";
 import { AuthPageLayout } from "../components/AuthPageLayout";
 import { PasswordInput } from "../components/PasswordInput";
 import { SignUpLegalConsent } from "../components/SignUpLegalConsent";
@@ -106,126 +105,106 @@ export function AuthScreen() {
     }
   };
 
+  const busy = loading || oauthLoading !== null;
+
   return (
-    <AuthPageLayout
-      footer={
-        <div className="mt-6 sm:mt-8 p-3 sm:p-4 bg-[#F5F7FA] rounded-2xl">
-          <p className="text-[11px] sm:text-xs text-[#1F2937] text-center leading-relaxed">
-            Crowth is an AI investment analysis platform. This app does not
-            hold funds, execute trades, or manage real investments. All
-            portfolio values are simulations for educational purposes.
-          </p>
-        </div>
-      }
-    >
-      <h1 className="text-2xl sm:text-3xl font-bold text-[#0A1F44] mb-2">
-        {isLogin ? "Welcome back" : "Create account"}
+    <AuthPageLayout>
+      <h1 className="text-2xl sm:text-3xl font-bold text-[#0A1F44] mb-1.5">
+        {isLogin ? "Welcome back" : "Log in or sign up"}
       </h1>
-      <p className="text-sm sm:text-base text-gray-600 mb-6 sm:mb-8">
+      <p className="text-sm text-gray-500 mb-6">
         {isLogin
-          ? "Sign in to sync your demo portfolio to the cloud"
-          : "Start learning to invest today"}
+          ? "Sign in to sync your demo portfolio"
+          : "Learn to invest with AI guidance — practice, no real money"}
       </p>
 
       {!isSupabaseConfigured && (
         <p className="text-xs text-[#FFB612] bg-[#FFB612]/10 rounded-xl p-3 mb-4">
           Supabase is not connected yet. Add your project URL and anon key to
-          `.env`, then restart the app. Google sign in requires Supabase.
+          `.env`, then restart the app.
         </p>
       )}
 
       {error && (
-        <div style={{ color: "#E03A3E", fontSize: 12, marginBottom: 8 }}>
+        <p className="text-xs text-[#E03A3E] mb-3" role="alert">
           {error}
-        </div>
+        </p>
       )}
       {notice && (
-        <div className="text-xs text-[#0A1F44] bg-[#0A1F44]/8 rounded-xl p-3 mb-4">
+        <p className="text-xs text-[#0A1F44] bg-[#0A1F44]/8 rounded-xl p-3 mb-4">
           {notice}
-        </div>
+        </p>
       )}
 
-      {!isLogin && (
-        <div className="mb-4 p-3 sm:p-4 bg-[#F5F7FA] rounded-2xl">
-          <SignUpLegalConsent actionLabel="Continue with Google" />
-        </div>
-      )}
-
+      {/* Social first — ChatGPT pattern */}
       <SocialAuthButtons
-        disabled={loading}
+        disabled={busy}
         loadingProvider={oauthLoading}
         onGoogleClick={() => handleOAuth("google")}
         onAppleClick={() => handleOAuth("apple")}
       />
 
-      <div className="relative my-6 sm:my-8">
+      <div className="relative my-5">
         <div className="absolute inset-0 flex items-center">
           <span className="w-full border-t border-gray-200" />
         </div>
-        <div className="relative flex justify-center text-xs uppercase">
-          <span className="bg-white px-3 text-gray-500">
-            or {isLogin ? "sign in" : "sign up"} with email
+        <div className="relative flex justify-center text-xs">
+          <span className="bg-white px-3 text-gray-400 uppercase tracking-wide">
+            or
           </span>
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
-        <div className="space-y-2">
-          <Label htmlFor="email" className="text-[#0A1F44]">
-            Email
-          </Label>
-          <Input
-            id="email"
-            type="email"
-            placeholder="Enter your email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="h-12 sm:h-14 rounded-2xl bg-[#F5F7FA] border-0 text-base text-[#0A1F44] placeholder:text-gray-400"
-            required
-            disabled={loading || oauthLoading !== null}
-          />
-        </div>
+      <form onSubmit={handleSubmit} className="space-y-3">
+        <Input
+          id="email"
+          type="email"
+          placeholder="Email address"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          className="h-12 rounded-2xl bg-white border border-gray-200 text-base text-[#0A1F44] placeholder:text-gray-400 focus-visible:ring-[#0A1F44]/20"
+          required
+          disabled={busy}
+          autoComplete="email"
+        />
 
-        <div className="space-y-2">
-          <div className="flex items-center justify-between gap-3">
-            <Label htmlFor="password" className="text-[#0A1F44]">
-              Password
-            </Label>
-            {isLogin && isSupabaseConfigured && (
-              <Link
-                to="/auth/forgot-password"
-                className="text-xs font-medium text-[#0A1F44] hover:underline shrink-0"
-              >
-                Forgot password?
-              </Link>
-            )}
-          </div>
-          <PasswordInput
-            id="password"
-            placeholder="Enter your password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            disabled={loading || oauthLoading !== null}
-            autoComplete={isLogin ? "current-password" : "new-password"}
-          />
-        </div>
+        <PasswordInput
+          id="password"
+          placeholder="Password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+          disabled={busy}
+          autoComplete={isLogin ? "current-password" : "new-password"}
+          className="h-12 rounded-2xl bg-white border border-gray-200 text-base text-[#0A1F44] placeholder:text-gray-400 pr-12 focus-visible:ring-[#0A1F44]/20"
+        />
 
-        {!isLogin && (
-          <div className="pt-1">
-            <SignUpLegalConsent actionLabel="Sign Up" />
-          </div>
-        )}
+        <SignUpLegalConsent />
 
         <Button
           type="submit"
-          disabled={loading || oauthLoading !== null}
-          className="w-full bg-[#0A1F44] hover:bg-[#0A1F44]/90 text-white h-12 sm:h-14 rounded-2xl text-base sm:text-lg mt-4 sm:mt-6"
+          disabled={busy}
+          className="w-full bg-[#0A1F44] hover:bg-[#0A1F44]/90 text-white h-12 rounded-2xl text-base font-medium mt-1"
         >
-          {loading ? "Please wait..." : isLogin ? "Sign In" : "Sign Up"}
+          {loading
+            ? "Please wait..."
+            : isLogin
+              ? "Log in"
+              : "Continue"}
         </Button>
 
-        <div className="text-center">
+        {/* DeepSeek-style secondary links */}
+        <div className="flex items-center justify-between pt-1 text-sm">
+          {isLogin && isSupabaseConfigured ? (
+            <Link
+              to="/auth/forgot-password"
+              className="text-[#0A1F44] hover:underline"
+            >
+              Forgot password?
+            </Link>
+          ) : (
+            <span />
+          )}
           <button
             type="button"
             onClick={() => {
@@ -233,18 +212,17 @@ export function AuthScreen() {
               setError("");
               setNotice("");
             }}
-            className="text-gray-600 hover:text-[#0A1F44]"
-            disabled={loading || oauthLoading !== null}
+            className="text-[#0A1F44] font-medium hover:underline"
+            disabled={busy}
           >
-            {isLogin
-              ? "Don't have an account? "
-              : "Already have an account? "}
-            <span className="font-medium text-[#0A1F44]">
-              {isLogin ? "Sign Up" : "Sign In"}
-            </span>
+            {isLogin ? "Sign up" : "Log in"}
           </button>
         </div>
       </form>
+
+      <p className="mt-8 text-[10px] text-gray-400 text-center leading-relaxed">
+        Demo portfolios only. Crowth does not hold funds or execute trades.
+      </p>
     </AuthPageLayout>
   );
 }

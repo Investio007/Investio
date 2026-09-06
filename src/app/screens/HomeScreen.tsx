@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import {
   ArrowUp,
@@ -13,13 +13,17 @@ import { Card } from "../components/ui/card";
 import { useCrowth } from "../context/CrowthContext";
 import { useAddToPortfolioWithPicker } from "../hooks/useAddToPortfolioWithPicker";
 import { companies, type CrowthAsset } from "../data/assets";
+import { resolveAsset } from "../data/portfolioCatalog";
+import { openAssetAnalysis, buildMarketAsset } from "../lib/assetAnalysisNav";
+import { formatMarketPrice, todaysMomentumScore } from "../lib/formatMarketPrice";
+import { formatRand, computePortfolioPerformance } from "../lib/portfolioPerformance";
 import {
   COUNTRY_MARKETS,
   getCountryById,
   getStocksForCountry,
 } from "../data/countryMarkets";
 import PriceChart from "../components/PriceChart";
-import { useInsights, useMarketSnapshot } from "../hooks/useMarketData";
+import { useInsights, useMarketSnapshot, usePortfolioQuotes } from "../hooks/useMarketData";
 import PriceSkeleton from "../components/PriceSkeleton";
 import type { MarketInsight, Period } from "../services/marketApi";
 
@@ -39,22 +43,29 @@ const getRatingColor = (rating: string) => {
 };
 
 function formatInsightPrice(insight: MarketInsight): string {
-  if (insight.price == null) return "—";
-  const prefix =
-    insight.currency === "USD"
-      ? "$"
-      : insight.currency === "ZAR"
-        ? "R"
-        : `${insight.currency} `;
-  return `${prefix}${insight.price.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
+  return formatMarketPrice(insight.price, insight.currency, insight.ticker);
 }
 
 function insightToAsset(insight: MarketInsight): CrowthAsset {
-  const existing = companies.find((company) => company.id === insight.id);
-  if (existing) return existing;
+  const existing =
+    companies.find((company) => company.id === insight.id) ??
+    resolveAsset(insight.id) ??
+    resolveAsset(insight.ticker);
+  if (existing) {
+    return {
+      ...existing,
+      name: insight.name || existing.name,
+      price: formatInsightPrice(insight),
+      priceRaw: insight.price ?? existing.priceRaw,
+      change: `${insight.changePositive ? "+" : ""}${insight.changePercent?.toFixed(1) ?? "0"}%`,
+      changePositive: insight.changePositive,
+      rating: insight.rating,
+      ratingColor: insight.ratingColor,
+      aiScore: insight.aiScore,
+      description: insight.aiPrediction,
+      explanation: insight.aiPrediction,
+    };
+  }
 
   return {
     id: insight.id,
@@ -88,7 +99,7 @@ function formatUpdatedAt(iso: string | null): string {
 
 export function HomeScreen() {
   const navigate = useNavigate();
-  const { demoBalance, signOut } = useCrowth();
+  const { demoBalance, signOut, activePortfolio } = useCrowth();
   const { requestAdd, pickerDialog } = useAddToPortfolioWithPicker();
   const { data: insights, updatedAt, loading: insightsLoading, error: insightsError } = useInsights();
   const [selectedCountryId, setSelectedCountryId] = useState(COUNTRY_MARKETS[0].id);
@@ -96,6 +107,15 @@ export function HomeScreen() {
     getStocksForCountry(COUNTRY_MARKETS[0].id)[0]?.id ?? "apple",
   );
   const [activePeriod, setActivePeriod] = useState<Period>("1D");
+
+  const holdings = activePortfolio?.holdings ?? [];
+  const holdingIds = useMemo(() => holdings.map((h) => h.id), [holdings]);
+  const { quotes: portfolioQuotes, loading: portfolioQuotesLoading } =
+    usePortfolioQuotes(holdingIds);
+  const portfolioPerf = useMemo(
+    () => computePortfolioPerformance(holdings, portfolioQuotes, demoBalance),
+    [holdings, portfolioQuotes, demoBalance],
+  );
 
   const selectedCountry = getCountryById(selectedCountryId) ?? COUNTRY_MARKETS[0];
   const countryStocks = getStocksForCountry(selectedCountryId);
@@ -123,6 +143,7 @@ export function HomeScreen() {
     chart: selectedChart,
     chartSource,
     loading: marketLoading,
+    error: marketError,
   } = useMarketSnapshot(selectedStock?.id ?? "apple", activePeriod);
 
   const quoteMatchesStock = selectedQuote?.id === selectedStock?.id;
@@ -132,8 +153,9 @@ export function HomeScreen() {
   const chartIsApproximate =
     chartSource === "synthetic" || chartSource === "stale_cache";
 
-  const dailyChangePct = 1.68;
-  const dailyChangeAmount = Math.round(demoBalance * (dailyChangePct / 100));
+  const dayPct = portfolioPerf.avgChangePercent;
+  const dayPnl = portfolioPerf.dayPnl;
+  const dayPositive = (dayPct ?? 0) >= 0;
 
   return (
     <div className="relative min-h-full bg-[#F5F7FA]">
@@ -176,12 +198,34 @@ export function HomeScreen() {
             <h2 className="text-4xl font-bold text-[#0A1F44]">
               R {demoBalance.toLocaleString()}
             </h2>
-            <p className="text-sm text-[#007A4D] font-medium mt-2 flex items-center gap-1">
-              <ArrowUp className="w-4 h-4 shrink-0" />
-              <span>
-                +R{dailyChangeAmount.toLocaleString()} Today ({dailyChangePct}%)
-              </span>
-            </p>
+            {portfolioPerf.holdingCount === 0 ? (
+              <p className="text-sm text-gray-500 font-medium mt-2">
+                Add stocks to see today’s change
+              </p>
+            ) : dayPnl == null || dayPct == null ? (
+              <p className="text-sm text-gray-500 font-medium mt-2">
+                {portfolioQuotesLoading
+                  ? "Checking today’s change…"
+                  : "Live change unavailable"}
+              </p>
+            ) : (
+              <p
+                className={`text-sm font-medium mt-2 flex items-center gap-1 ${
+                  dayPositive ? "text-[#007A4D]" : "text-[#E03A3E]"
+                }`}
+              >
+                {dayPositive ? (
+                  <ArrowUp className="w-4 h-4 shrink-0" />
+                ) : (
+                  <ArrowDown className="w-4 h-4 shrink-0" />
+                )}
+                <span>
+                  {dayPositive ? "+" : "−"}
+                  {formatRand(dayPnl)} Today ({dayPositive ? "+" : ""}
+                  {dayPct.toFixed(2)}%)
+                </span>
+              </p>
+            )}
             <p className="text-xs text-gray-500 mt-2">
               Simulation Mode — No real funds used
             </p>
@@ -272,19 +316,18 @@ export function HomeScreen() {
                   <div style={{ width: 100 }}>
                     <PriceSkeleton />
                   </div>
+                ) : marketError && !displayQuote?.price ? (
+                  <span className="text-sm text-gray-500">
+                    Live price unavailable
+                  </span>
                 ) : (
                   <>
                     <span className="text-xl font-bold text-[#0A1F44]">
-                      {displayQuote?.currency === "ZAr" ||
-                      displayQuote?.currency === "ZAR"
-                        ? "R"
-                        : displayQuote?.currency === "USD"
-                          ? "$"
-                          : displayQuote?.currency || "$"}{" "}
-                      {displayQuote?.price?.toLocaleString("en-ZA", {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      }) ?? "—"}
+                      {formatMarketPrice(
+                        displayQuote?.price,
+                        displayQuote?.currency,
+                        displayQuote?.ticker ?? selectedStock.ticker,
+                      )}
                     </span>
                     {displayQuote?.changePercent != null && (
                       <span
@@ -304,6 +347,9 @@ export function HomeScreen() {
                   </>
                 )}
               </div>
+              {marketError && (
+                <p className="text-[11px] text-[#E03A3E] mt-1">{marketError}</p>
+              )}
             </div>
 
             <PriceChart
@@ -329,6 +375,36 @@ export function HomeScreen() {
                 </button>
               ))}
             </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                if (!selectedStock) return;
+                const score =
+                  displayQuote?.changePercent != null
+                    ? todaysMomentumScore(displayQuote.changePercent)
+                    : 50;
+                const asset = buildMarketAsset({
+                  id: selectedStock.id,
+                  ticker: selectedStock.ticker,
+                  name: displayQuote?.name ?? selectedStock.name,
+                  price: displayQuote?.price,
+                  currency: displayQuote?.currency ?? "ZAR",
+                  changePercent: displayQuote?.changePercent,
+                  changePositive: displayQuote?.changePositive,
+                  aiScore: score,
+                });
+                openAssetAnalysis(navigate, {
+                  id: asset.id,
+                  ticker: asset.ticker,
+                  name: asset.name,
+                  asset,
+                });
+              }}
+              className="mt-4 w-full py-2.5 px-4 rounded-xl border-2 border-[#0A1F44] text-[#0A1F44] font-medium text-sm hover:bg-[#0A1F44]/5 transition-colors"
+            >
+              View Details
+            </button>
               </>
             )}
           </div>
@@ -367,7 +443,7 @@ export function HomeScreen() {
             </span>
           </div>
           <p className="text-xs text-gray-500 mb-4">
-            Ranked by today&apos;s live performance · AI predictions update with market data
+            Ranked by today’s live moves · Prices in rand · Easy AI tips
             {updatedAt ? ` · ${formatUpdatedAt(updatedAt)}` : ""}
           </p>
 
@@ -468,9 +544,15 @@ export function HomeScreen() {
                     <div className="flex gap-2">
                       <button
                         type="button"
-                        onClick={() =>
-                          navigate("/analysis", { state: { assetId: insight.id } })
-                        }
+                        onClick={() => {
+                          const asset = insightToAsset(insight);
+                          openAssetAnalysis(navigate, {
+                            id: asset.id,
+                            ticker: asset.ticker,
+                            name: asset.name,
+                            asset,
+                          });
+                        }}
                         className="flex-1 py-2.5 px-4 rounded-xl border-2 border-[#0A1F44] text-[#0A1F44] font-medium text-sm hover:bg-[#0A1F44]/5 transition-colors"
                       >
                         View Details

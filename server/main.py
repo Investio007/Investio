@@ -23,6 +23,14 @@ load_dotenv(_SERVER_DIR / ".env", override=True)
 
 from sentry_init import init_sentry
 
+from actuarial.returns import calculate_return_stats
+from actuarial.risk import calculate_var_cte, calculate_multihorizon_risk
+from actuarial.options import black_scholes
+from actuarial.capm import calculate_capm_alpha, SA_REPO_RATE
+from actuarial.regime import detect_market_regime
+from actuarial.scoring import market_consistent_score
+from actuarial.translator import translate_to_plain_english
+
 SENTRY_ENABLED = init_sentry()
 
 # ─── Primary data source: Fincept Terminal (fallback to yfinance) ─────────────
@@ -109,6 +117,9 @@ _DEFAULT_CORS_ORIGINS = [
     "capacitor://localhost",
     "http://localhost",
     "https://localhost",
+    "https://crowthza.app",
+    "https://www.crowthza.app",
+    "https://investio-wheat.vercel.app",
 ]
 _extra_cors = [
     origin.strip()
@@ -155,6 +166,7 @@ _MARKET_RATE_PATHS = (
     "/api/compare",
     "/api/insights",
     "/api/sentiment/",
+    "/api/actuarial/",
 )
 
 
@@ -315,6 +327,7 @@ TTL = {
     "compare":   60,
     "insights":  60,
     "sentiment": 300,
+    "actuarial": 600,
 }
 
 # ─── Retry config ─────────────────────────────────────────────────────────────
@@ -2164,6 +2177,310 @@ async def get_sentiment(symbol: str):
             return {**stale, "stale": True}
         data = build_sentiment_sync(asset_id, ticker_symbol, company_name)
         return {**data, "stale": True}
+
+
+def _fetch_actuarial_prices(ticker_symbol: str) -> list[float]:
+    """1Y daily closes via Finnhub, else yfinance. Empty list on failure."""
+    end = int(time.time())
+    start = end - 365 * 24 * 3600
+
+    if FINNHUB_API_KEY:
+        try:
+            sym, asset_type = _finnhub_symbol(ticker_symbol)
+            path = "/crypto/candle" if asset_type == "crypto" else "/stock/candle"
+            data = finnhub_request(
+                path,
+                {
+                    "symbol": sym,
+                    "resolution": "D",
+                    "from": start,
+                    "to": end,
+                },
+            )
+            if data.get("s") == "ok" and data.get("c"):
+                return [float(c) for c in data["c"] if c is not None]
+        except Exception as exc:
+            print(f"[Crowth] actuarial Finnhub candles failed for {ticker_symbol}: {exc}")
+
+    # Prefer the same download path used by chart endpoints
+    try:
+        session = get_yf_session()
+        df = yf.download(
+            ticker_symbol,
+            period="1y",
+            interval="1d",
+            progress=False,
+            auto_adjust=True,
+            session=session,
+        )
+        if df is not None and not df.empty:
+            close_col = None
+            if "Close" in getattr(df, "columns", []):
+                close_col = df["Close"]
+            elif hasattr(df, "columns") and any(
+                str(c).lower() == "close" or (isinstance(c, tuple) and "Close" in c)
+                for c in df.columns
+            ):
+                # MultiIndex columns from yfinance download
+                try:
+                    close_col = df["Close"]
+                except Exception:
+                    close_col = df.iloc[:, 0]
+            if close_col is not None:
+                series = close_col.dropna()
+                if hasattr(series, "squeeze"):
+                    series = series.squeeze()
+                prices = [float(x) for x in series.tolist() if x is not None]
+                if len(prices) >= 10:
+                    return prices
+    except Exception as exc:
+        print(f"[Crowth] actuarial yfinance download failed for {ticker_symbol}: {exc}")
+
+    try:
+        session = get_yf_session()
+        ticker = yf.Ticker(ticker_symbol, session=session)
+        hist = ticker.history(period="1y", interval="1d")
+        if hist is not None and not hist.empty and "Close" in hist.columns:
+            return hist["Close"].dropna().astype(float).tolist()
+    except Exception as exc:
+        print(f"[Crowth] actuarial yfinance history failed for {ticker_symbol}: {exc}")
+
+    # Last resort: reuse chart helper closes for 1Y
+    try:
+        chart = fetch_chart_sync(ticker_symbol, "1Y")
+        closes = []
+        for point in chart or []:
+            val = point.get("close") if isinstance(point, dict) else None
+            if val is None and isinstance(point, dict):
+                val = point.get("price")
+            if val is not None:
+                closes.append(float(val))
+        if len(closes) >= 10:
+            return closes
+    except Exception as exc:
+        print(f"[Crowth] actuarial chart fallback failed for {ticker_symbol}: {exc}")
+
+    return []
+
+
+def _fetch_actuarial_beta(ticker_symbol: str, asset_id: str) -> float:
+    try:
+        session = get_yf_session()
+        ticker = yf.Ticker(ticker_symbol, session=session)
+        info = ticker.info or {}
+        beta = info.get("beta") or info.get("beta3Year")
+        if beta is not None:
+            return float(beta)
+    except Exception:
+        pass
+    fundamentals = _fundamentals_for_asset(asset_id)
+    if fundamentals and fundamentals.get("beta") is not None:
+        try:
+            return float(fundamentals["beta"])
+        except (TypeError, ValueError):
+            pass
+    return 1.0
+
+
+def _component_traffic(pct: float, question: str) -> dict:
+    if pct >= 65:
+        label, color = "Good", "green"
+    elif pct >= 40:
+        label, color = "Average", "gold"
+    else:
+        label, color = "Risky", "red"
+    return {"pct": pct, "label": label, "color": color, "question": question}
+
+
+@app.get("/api/actuarial/{symbol}")
+async def get_actuarial_analysis(
+    symbol: str,
+    investment: float = 10000.0,
+    horizon: float = 1.0,
+):
+    """
+    Full actuarial AI analysis for an investment.
+
+    Hardy / Lo / Hull / Barucci / Wüthrich / Boudreault frameworks,
+    translated to Grade 9 plain English.
+    """
+    asset_id = symbol.lower().strip()
+    ticker_symbol = resolve_ticker(symbol)
+    investment = max(100.0, float(investment or 10000.0))
+    horizon = max(0.1, min(30.0, float(horizon or 1.0)))
+    cache_key = f"actuarial:{ticker_symbol}:{int(investment)}:{horizon}"
+
+    cached, is_fresh = cache_get(cache_key, TTL["actuarial"])
+    if is_fresh:
+        return {**cached, "source": "cache"}
+
+    try:
+        prices = await with_retry(
+            lambda: _fetch_actuarial_prices(ticker_symbol),
+            timeout=15.0,
+        )
+        beta = await with_retry(
+            lambda: _fetch_actuarial_beta(ticker_symbol, asset_id),
+            timeout=10.0,
+        )
+
+        quote_key = f"quote:{ticker_symbol}"
+        quote_cached = cache_get_stale(quote_key)
+        current_price = 100.0
+        if quote_cached and quote_cached.get("price"):
+            try:
+                current_price = float(quote_cached["price"])
+            except (TypeError, ValueError):
+                current_price = 100.0
+        elif prices:
+            current_price = float(prices[-1])
+
+        returns = calculate_return_stats(prices if prices else [])
+        mu = returns["mu"]
+        sigma = returns["sigma"]
+
+        risk = calculate_var_cte(mu, sigma, investment, horizon, 0.95)
+        multi_horizon = calculate_multihorizon_risk(mu, sigma, investment)
+
+        options = black_scholes(
+            S=current_price,
+            K=current_price,
+            T=horizon,
+            r=SA_REPO_RATE,
+            sigma=max(sigma, 0.05),
+        )
+
+        capm = calculate_capm_alpha(
+            stock_return=mu,
+            risk_free_rate=SA_REPO_RATE,
+            beta=beta,
+        )
+
+        regime = detect_market_regime(prices if prices else [])
+
+        score = market_consistent_score(
+            var_95=risk["var_95"],
+            cte_95=risk["cte_95"],
+            alpha_pct=capm["alpha_pct"],
+            sharpe_ratio=returns["sharpe_ratio"],
+            regime=regime["regime"],
+            regime_confidence=regime["confidence"],
+            investment=investment,
+            prob_loss_pct=risk["prob_loss_pct"],
+            risk_neutral_prob_gain_pct=options["risk_neutral_prob_gain_pct"],
+        )
+
+        all_metrics = {
+            **returns,
+            **risk,
+            **options,
+            **capm,
+            **regime,
+        }
+        english = translate_to_plain_english(all_metrics, investment)
+
+        analysis = {
+            "growth": _component_traffic(
+                score["components"]["alpha"], "Is it growing?"
+            ),
+            "profitability": _component_traffic(
+                score["components"]["sharpe"], "Does it make money?"
+            ),
+            "stability": _component_traffic(
+                score["components"]["risk"], "Is the price stable?"
+            ),
+            "competition": _component_traffic(
+                score["components"]["regime"], "Is the market good right now?"
+            ),
+        }
+
+        result = {
+            "id": asset_id,
+            "ticker": ticker_symbol,
+            "investment": investment,
+            "horizon": horizon,
+            "score": score,
+            "analysis": analysis,
+            "metrics": {
+                "returns": returns,
+                "risk": risk,
+                "multi_horizon": multi_horizon,
+                "options": options,
+                "capm": capm,
+                "regime": regime,
+            },
+            "explanation": english["explanation"],
+            "summary": english["summary"],
+            "books_used": [
+                "Hardy (2003) Investment Guarantees — Ch. 2, 4, 5, 7",
+                "Lo (2018) Derivative Pricing — Ch. 5-7",
+                "Hull (2018) Options, Futures and Other Derivatives — Ch. 15",
+                "Barucci & Fontana (2017) Financial Markets Theory — Ch. 5",
+                "Wüthrich (2016) Market-Consistent Actuarial Valuation",
+                "Boudreault & Renaud (2019) Actuarial Finance — Ch. 8",
+            ],
+            "stale": False,
+        }
+
+        cache_set(cache_key, result)
+        return {**result, "source": "live"}
+
+    except Exception as exc:
+        stale = cache_get_stale(cache_key)
+        if stale:
+            return {**stale, "stale": True, "source": "stale_cache"}
+
+        return {
+            "id": asset_id,
+            "ticker": ticker_symbol,
+            "investment": investment,
+            "horizon": horizon,
+            "score": {
+                "score": 50,
+                "color": "gold",
+                "label": "Analysis not available right now",
+                "summary": (
+                    "We could not complete the full actuarial analysis. "
+                    "Try again shortly."
+                ),
+                "components": {"risk": 50, "alpha": 50, "sharpe": 50, "regime": 50},
+            },
+            "analysis": {
+                "growth": {
+                    "pct": 50,
+                    "label": "Average",
+                    "color": "gold",
+                    "question": "Is it growing?",
+                },
+                "profitability": {
+                    "pct": 50,
+                    "label": "Average",
+                    "color": "gold",
+                    "question": "Does it make money?",
+                },
+                "stability": {
+                    "pct": 50,
+                    "label": "Average",
+                    "color": "gold",
+                    "question": "Is the price stable?",
+                },
+                "competition": {
+                    "pct": 50,
+                    "label": "Average",
+                    "color": "gold",
+                    "question": "Is the market good right now?",
+                },
+            },
+            "explanation": [
+                "Analysis temporarily unavailable. Please try again shortly."
+            ],
+            "summary": "Analysis temporarily unavailable.",
+            "metrics": {},
+            "books_used": [],
+            "stale": True,
+            "source": "error_fallback",
+            "error": str(exc),
+        }
 
 
 # ─── Startup cache warm ───────────────────────────────────────────────────────

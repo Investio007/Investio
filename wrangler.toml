@@ -31,5 +31,4 @@ binding = "AI"
 #   npx wrangler secret put GOOGLE_WEB_CLIENT_ID
 #   npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY
 #
-# Optional legacy Railway fallback (unused when native API is live):
-#   MARKET_API_ORIGIN
+# Optional: MARKET_API_ORIGIN is unused (actuarial runs natively on the Worker).

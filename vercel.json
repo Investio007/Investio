@@ -14,9 +14,10 @@
           "key": "Strict-Transport-Security",
           "value": "max-age=31536000; includeSubDomains"
         },
+        { "key": "X-XSS-Protection", "value": "0" },
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://us.i.posthog.com https://*.posthog.com https://*.sentry.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://investio-production.up.railway.app https://*.vercel.app https://us.i.posthog.com https://*.posthog.com https://*.sentry.io https://finnhub.io; img-src 'self' data: https: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' https://accounts.google.com https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://accounts.google.com https://oauth2.googleapis.com https://www.googleapis.com https://us.i.posthog.com https://*.posthog.com https://*.sentry.io https://*.ingest.sentry.io https://finnhub.io https://investio-production.up.railway.app https://*.vercel.app; frame-src https://accounts.google.com https://*.google.com; worker-src 'self' blob:; child-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
         }
       ]
     }

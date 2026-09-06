@@ -16,6 +16,14 @@ export interface QuoteData {
   volume: number | null;
   marketCap: number | null;
   currency: string;
+  /** Listing currency before ZAR conversion (e.g. USD). */
+  currencyNative?: string;
+  priceNative?: number | null;
+  fxRateToZar?: number | null;
+  fxSource?: string;
+  available?: boolean;
+  stale?: boolean;
+  source?: string;
 }
 
 export interface ChartPoint {
@@ -53,6 +61,9 @@ export type MarketInsight = {
   changePercent: number | null;
   changePositive: boolean;
   currency: string;
+  currencyNative?: string;
+  priceNative?: number | null;
+  fxRateToZar?: number | null;
   aiScore: number;
   aiPrediction: string;
   rating: string;
@@ -113,6 +124,110 @@ export type CompareResponse = {
   compareVersion?: number;
 };
 
+// ── Actuarial AI Engine types ─────────────────────────────────────────────
+
+export interface ActuarialAnalysis {
+  pct: number;
+  label: string;
+  color: string;
+  question: string;
+}
+
+export interface ActuarialScore {
+  score: number | null;
+  color: string;
+  label: string;
+  summary: string;
+  components: {
+    risk: number;
+    alpha: number;
+    sharpe: number;
+    regime: number;
+  };
+}
+
+export interface ActuarialMetrics {
+  returns: {
+    annual_expected_return: number;
+    annual_volatility: number;
+    sharpe_ratio: number;
+    sortino_ratio: number;
+    max_drawdown: number;
+    skewness: number;
+    excess_kurtosis: number;
+    data_points: number;
+  };
+  risk: {
+    var_95: number;
+    cte_95: number;
+    extreme_loss_1pct: number;
+    prob_loss_pct: number;
+    prob_double_pct: number;
+    expected_terminal_value: number;
+    horizon_years: number;
+  };
+  multi_horizon: Array<{
+    horizon: string;
+    years: number;
+    var_95: number;
+    cte_95: number;
+    expected_value: number;
+    prob_loss: number;
+  }>;
+  options: {
+    call_price: number;
+    put_price: number;
+    risk_neutral_prob_gain_pct: number;
+    risk_neutral_prob_loss_pct: number;
+    downside_protection_cost_pct: number;
+    downside_protection_cost_rand: number;
+    delta: number;
+    put_call_ratio: number;
+  };
+  capm: {
+    capm_expected_return_pct: number;
+    actual_return_pct: number;
+    alpha_pct: number;
+    alpha_label: string;
+    alpha_color: string;
+    beta: number;
+    market_price_of_risk: number;
+    treynor_ratio: number;
+  };
+  regime: {
+    regime: string;
+    simple_label: string;
+    description: string;
+    advice: string;
+    color: string;
+    confidence: number;
+    recent_volatility: number;
+    long_term_volatility: number;
+    above_200day_ma: boolean;
+  };
+}
+
+export interface ActuarialData {
+  id: string;
+  ticker: string;
+  investment: number;
+  horizon: number;
+  score: ActuarialScore;
+  analysis: {
+    growth: ActuarialAnalysis;
+    profitability: ActuarialAnalysis;
+    stability: ActuarialAnalysis;
+    competition: ActuarialAnalysis;
+  };
+  metrics: ActuarialMetrics;
+  explanation: string[];
+  summary: string;
+  books_used: string[];
+  stale: boolean;
+  source: string;
+  available?: boolean;
+}
+
 const DEFAULT_COMPARE_METRIC: CompareMetric = {
   pct: 50,
   label: "Average",
@@ -170,7 +285,7 @@ export function normalizeCompareCompany(
     change: raw.change ?? null,
     changePercent: raw.changePercent ?? null,
     changePositive: raw.changePositive ?? (raw.changePercent ?? 0) >= 0,
-    currency: raw.currency ?? "USD",
+    currency: raw.currency ?? "ZAR",
     aiScore,
     rating: raw.rating ?? "Could Be Worth It",
     explanation: raw.explanation ?? fallback?.explanation ?? fallback?.description ?? "",
@@ -203,4 +318,12 @@ export const marketApi = {
   getCompare: () => apiFetch<CompareResponse>("/api/compare"),
   getInsights: () => apiFetch<InsightsResponse>("/api/insights"),
   health: () => apiFetch<{ status: string }>("/api/health"),
+  getActuarial: (
+    symbol: string,
+    investment: number = 10000,
+    horizon: number = 1,
+  ) =>
+    apiFetch<ActuarialData>(
+      `/api/actuarial/${symbol}?investment=${investment}&horizon=${horizon}`,
+    ),
 };

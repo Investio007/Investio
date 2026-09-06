@@ -1,10 +1,11 @@
-const AI_SYSTEM_PROMPT = `You are Crowth's AI investment advisor for South African users.
-Answer every question in simple, plain English. Maximum 3 sentences.
+const AI_SYSTEM_PROMPT = `You are Crowth's AI investment helper for South African beginners.
+Use simple Grade 9 English. Short words. Short sentences.
+Answer in 3 to 5 sentences only. Do not use hard finance words.
 Always end your response on a new line with exactly one of these:
 Risk Level: Low
 Risk Level: Moderate
 Risk Level: High
-Do not use markdown, bullet points, or formatting of any kind.`;
+Do not use markdown, bullet points, or special formatting.`;
 
 export type AiRiskLevel = "Low" | "Moderate" | "High";
 
@@ -35,7 +36,7 @@ export function parseAiResponse(fullText: string): AiChatResponse {
   const risk: AiRiskLevel | null =
     riskValue === "Low" || riskValue === "Moderate" || riskValue === "High" ? riskValue : null;
   return {
-    text: mainText || fullText.trim() || "I couldn't generate a response. Please try again.",
+    text: mainText || fullText.trim() || "I could not answer right now. Please try again.",
     risk,
   };
 }
@@ -50,7 +51,7 @@ export async function chatWithWorkersAi(
       { role: "system", content: AI_SYSTEM_PROMPT },
       { role: "user", content: message },
     ],
-    max_tokens: 256,
+    max_tokens: 220,
   });
 
   let content = "";

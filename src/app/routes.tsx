@@ -87,7 +87,7 @@ export const router = createBrowserRouter([
           },
           {
             path: "/analysis",
-            Component: StockAnalysisScreen,
+            element: <Navigate to="/home" replace />,
           },
         ],
       },
