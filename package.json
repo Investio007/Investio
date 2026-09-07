@@ -19,7 +19,8 @@
     "preview": "vite preview",
     "cap:sync": "npx cap sync",
     "cap:open:android": "npx cap open android",
-    "deploy:cloudflare": "npm run build && wrangler deploy"
+    "deploy:cloudflare": "npm run build && wrangler deploy",
+    "deploy:marketing": "python scripts/unpack-marketing-html.py && python scripts/polish-marketing-dist.py && wrangler deploy --config marketing/wrangler.toml"
   },
   "dependencies": {
     "@capacitor/app": "^7.1.2",

@@ -9,7 +9,7 @@ Use Cloudflare for DNS, the web app, and the market/AI API (Workers).
 | `crowthza.app` | Product (SPA + `/api`) | Live on Worker `crowth` |
 | `www.crowthza.app` | Same product Worker | Live |
 | `crowth.investiodev.workers.dev` | Fallback / preview | Live |
-| Marketing apex (e.g. `crowthza.com`) | Company / marketing site | Source in `marketing/` — deploy separately |
+| Marketing apex `crowthza.com` | Company / marketing site | Live on Worker `crowth-marketing` (`marketing/`) |
 
 ## Architecture
 

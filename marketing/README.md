@@ -1,24 +1,38 @@
-# Crowth marketing site
+# Crowth marketing site (`crowthza.com`)
 
-Static marketing landing for **crowthza.com** (separate from the product app on crowthza.app).
+Static marketing landing — separate from the product app on **crowthza.app**.
 
-## Source
+## Layout
 
-`index.html` is a self-contained Claude/Cursor HTML export (~10 MB). Open it in a browser — it unpacks embedded assets client-side.
+| Path | Role |
+|------|------|
+| `index.html` | Original Claude/Cursor HTML export (bundled, ~10 MB) |
+| `dist/` | Production static site (unpacked + polished) — generated |
+| `wrangler.toml` | Cloudflare Worker `crowth-marketing` + custom domains |
 
-## Local preview
+## Build
 
 ```bash
-# from repo root
-npx --yes serve marketing -p 4173
+python scripts/unpack-marketing-html.py
+python scripts/polish-marketing-dist.py
 ```
 
-Then open http://localhost:4173
+## Preview locally
 
-Or double-click `marketing/index.html` (some browsers restrict `file://` features).
+```bash
+npx --yes serve marketing/dist -p 4173
+```
 
-## Deploy target
+## Deploy
 
-Planned host: Cloudflare Pages / Worker for **`crowthza.com`** (not the product Worker `crowth` on `crowthza.app`).
+```bash
+npm run deploy:marketing
+```
 
-See `docs/cloudflare.md`.
+Live:
+
+- https://crowthza.com
+- https://www.crowthza.com
+- https://crowth-marketing.investiodev.workers.dev
+
+CTAs open the product app at https://crowthza.app. Legal links go to `/legal/*` on the app.
