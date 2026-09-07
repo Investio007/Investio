@@ -65,8 +65,21 @@ def main() -> int:
         flags=re.I,
     )
 
-    # Soften custom element wrappers that confuse some crawlers (keep content)
-    # Leave <x-dc> — required by the Design Components runtime.
+    # Inject React + ReactDOM before dc-runtime (bundler keeps them as assets
+    # but only embeds the runtime <script> in the template).
+    react = "assets/010be65f-f26c-4b10-aa78-521f0bede1ad.js"
+    react_dom = "assets/7de622e3-0177-4adc-a2eb-3a7c059e0528.js"
+    dc_runtime = "assets/962a04e3-6094-4e62-80e8-44dc86c8e7d2.js"
+    if dc_runtime in html and react not in html:
+        html = html.replace(
+            f'<script src="{dc_runtime}"></script>',
+            (
+                f'<script src="{react}"></script>\n'
+                f'<script src="{react_dom}"></script>\n'
+                f'<script src="{dc_runtime}"></script>'
+            ),
+            1,
+        )
 
     INDEX.write_text(html, encoding="utf-8")
 

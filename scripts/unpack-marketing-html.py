@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import base64
+import gzip
 import json
 import re
 import sys
+import zlib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -19,6 +21,48 @@ def extract_script(html: str, script_type: str) -> str | None:
     )
     m = pat.search(html)
     return m.group(1).strip() if m else None
+
+
+def decode_asset_bytes(data_b64: str) -> bytes:
+    raw = base64.b64decode(data_b64)
+    # Bundler often stores payloads gzip-compressed after base64.
+    if len(raw) >= 2 and raw[0] == 0x1F and raw[1] == 0x8B:
+        try:
+            return gzip.decompress(raw)
+        except OSError:
+            pass
+    # zlib wrapper
+    if len(raw) >= 2 and raw[0] == 0x78:
+        try:
+            return zlib.decompress(raw)
+        except zlib.error:
+            pass
+    return raw
+
+
+def ext_for_mime(mime: str) -> str:
+    if mime.startswith("image/"):
+        ext = mime.split("/", 1)[1].split(";")[0] or "png"
+        if ext == "jpeg":
+            return "jpg"
+        if ext == "svg+xml":
+            return "svg"
+        return ext
+    if "woff2" in mime:
+        return "woff2"
+    if "woff" in mime:
+        return "woff"
+    if "ttf" in mime or "font" in mime:
+        return "ttf"
+    if mime.startswith("text/css"):
+        return "css"
+    if "javascript" in mime or "ecmascript" in mime:
+        return "js"
+    if mime.startswith("text/html"):
+        return "html"
+    if "json" in mime:
+        return "json"
+    return "bin"
 
 
 def main() -> int:
@@ -43,7 +87,6 @@ def main() -> int:
     print("template type:", type(template).__name__)
 
     if isinstance(template, dict):
-        print("template keys:", list(template.keys())[:20])
         html_out = (
             template.get("html")
             or template.get("content")
@@ -56,34 +99,7 @@ def main() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
 
     if not isinstance(html_out, str):
-        (OUT / "_debug_shape.json").write_text(
-            json.dumps(
-                {
-                    "manifest_type": str(type(manifest)),
-                    "manifest_sample": (
-                        {
-                            k: (
-                                list(v.keys())
-                                if isinstance(v, dict)
-                                else type(v).__name__
-                            )
-                            for k, v in list(manifest.items())[:3]
-                        }
-                        if isinstance(manifest, dict)
-                        else str(manifest)[:500]
-                    ),
-                    "template_type": str(type(template)),
-                    "template_sample": (
-                        list(template.keys())[:30]
-                        if isinstance(template, dict)
-                        else str(template)[:500]
-                    ),
-                },
-                indent=2,
-            ),
-            encoding="utf-8",
-        )
-        print("Wrote debug file; unexpected shape")
+        print("Unexpected template shape", file=sys.stderr)
         return 2
 
     assets_dir = OUT / "assets"
@@ -93,11 +109,11 @@ def main() -> int:
             old.unlink()
 
     replaced = 0
+    gunzipped = 0
     if isinstance(manifest, dict):
         for key, entry in manifest.items():
             mime = "application/octet-stream"
             data_b64 = None
-            ext = "bin"
 
             if isinstance(entry, str):
                 data_b64 = entry
@@ -115,35 +131,27 @@ def main() -> int:
             if not data_b64 or not isinstance(data_b64, str):
                 continue
 
-            if mime.startswith("image/"):
-                ext = mime.split("/", 1)[1].split(";")[0] or "png"
-                if ext == "jpeg":
-                    ext = "jpg"
-                if ext == "svg+xml":
-                    ext = "svg"
-            elif "woff2" in mime:
-                ext = "woff2"
-            elif "woff" in mime:
-                ext = "woff"
-            elif "ttf" in mime or "font" in mime:
-                ext = "ttf"
-            elif mime.startswith("text/css"):
-                ext = "css"
-            elif "javascript" in mime:
-                ext = "js"
-            elif mime.startswith("text/html"):
-                ext = "html"
-            elif "json" in mime:
-                ext = "json"
-
+            ext = ext_for_mime(mime)
             safe = re.sub(r"[^a-zA-Z0-9_-]+", "_", key)[:80]
             filename = f"{safe}.{ext}"
             path = assets_dir / filename
+
             try:
-                raw = base64.b64decode(data_b64)
-            except Exception:
-                raw = data_b64.encode("utf-8")
-            path.write_bytes(raw)
+                before = base64.b64decode(data_b64)
+                decoded = decode_asset_bytes(data_b64)
+            except Exception as exc:
+                print(f"skip {key}: {exc}")
+                continue
+
+            if (
+                len(before) >= 2
+                and before[0] == 0x1F
+                and before[1] == 0x8B
+                and decoded[:2] != b"\x1f\x8b"
+            ):
+                gunzipped += 1
+
+            path.write_bytes(decoded)
 
             rel = f"assets/{filename}"
             if key in html_out:
@@ -166,7 +174,8 @@ def main() -> int:
     (OUT / "index.html").write_text(html_out, encoding="utf-8")
     print(f"Wrote {OUT / 'index.html'} ({len(html_out)} chars)")
     print(
-        f"Assets written: {len(list(assets_dir.glob('*')))}; placeholders replaced: {replaced}"
+        f"Assets written: {len(list(assets_dir.glob('*')))}; "
+        f"placeholders replaced: {replaced}; gunzipped: {gunzipped}"
     )
     return 0
 
