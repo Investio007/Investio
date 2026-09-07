@@ -1,4 +1,4 @@
-import { FINNHUB_PERIOD_MAP, toFinnhubSymbol } from "./symbols";
+import { FINNHUB_PERIOD_MAP, listingCurrency, toFinnhubSymbol } from "./symbols";
 
 const FINNHUB_BASE = "https://finnhub.io/api/v1";
 
@@ -98,17 +98,20 @@ export async function fetchQuote(token: string, ticker: string): Promise<QuoteDa
 
   const quote = await finnhubGet("/quote", { symbol }, token);
   const price = safeFloat(quote.c);
-  if (price == null) throw new Error(`No quote for ${ticker}`);
+  // Finnhub returns c:0 for unsupported symbols — treat as missing
+  if (price == null || price <= 0) throw new Error(`No quote for ${ticker}`);
 
   let name = symbol;
-  let currency = "USD";
+  let profileCurrency: string | null = null;
   try {
     const profile = await finnhubGet("/stock/profile2", { symbol }, token);
     name = String(profile.name || profile.ticker || symbol);
-    currency = String(profile.currency || "USD");
+    profileCurrency = profile.currency != null ? String(profile.currency) : null;
   } catch {
     /* profile optional */
   }
+
+  const currency = listingCurrency(ticker, profileCurrency);
 
   const prevClose = safeFloat(quote.pc);
   const change = safeFloat(quote.d) ?? (prevClose != null ? Math.round((price - prevClose) * 100) / 100 : null);
@@ -129,6 +132,43 @@ export async function fetchQuote(token: string, ticker: string): Promise<QuoteDa
     volume: null,
     marketCap: null,
     currency,
+  };
+}
+
+/** Quote-only fetch for bulk insights (skips profile2 to avoid Finnhub rate limits). */
+export async function fetchQuoteLight(token: string, ticker: string): Promise<QuoteData> {
+  const { symbol, assetType } = toFinnhubSymbol(ticker);
+
+  if (assetType === "crypto") {
+    return fetchQuote(token, ticker);
+  }
+
+  const quote = await finnhubGet("/quote", { symbol }, token);
+  const price = safeFloat(quote.c);
+  if (price == null || price <= 0) throw new Error(`No quote for ${ticker}`);
+
+  const prevClose = safeFloat(quote.pc);
+  const change =
+    safeFloat(quote.d) ??
+    (prevClose != null ? Math.round((price - prevClose) * 100) / 100 : null);
+  const changePercent =
+    safeFloat(quote.dp) ??
+    (change != null && prevClose ? Math.round((change / prevClose) * 10000) / 100 : null);
+  if (changePercent == null) throw new Error(`No change for ${ticker}`);
+
+  return {
+    ticker,
+    name: symbol,
+    price,
+    prevClose,
+    change,
+    changePercent,
+    changePositive: changePercent >= 0,
+    high: safeFloat(quote.h),
+    low: safeFloat(quote.l),
+    volume: null,
+    marketCap: null,
+    currency: listingCurrency(ticker, null),
   };
 }
 

@@ -42,3 +42,17 @@ export function getPickableAssets(): CrowthAsset[] {
 
   return Array.from(byId.values()).sort((a, b) => a.name.localeCompare(b.name));
 }
+
+/** Resolve by asset id or ticker (e.g. baidu / BIDU). */
+export function resolveAsset(idOrTicker: string): CrowthAsset | null {
+  const key = idOrTicker.trim();
+  if (!key) return null;
+  const lower = key.toLowerCase();
+  const upper = key.toUpperCase();
+  const catalog = getPickableAssets();
+  return (
+    catalog.find((a) => a.id === lower || a.id === key) ??
+    catalog.find((a) => a.ticker.toUpperCase() === upper) ??
+    null
+  );
+}

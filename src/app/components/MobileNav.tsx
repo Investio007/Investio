@@ -47,12 +47,12 @@ export function MobileNav() {
                 }`}
               >
                 <Icon
-                  className={`w-5 h-5 ${active ? "text-white" : "text-gray-600"}`}
+                  className={`w-5 h-5 ${active ? "text-white" : "text-[#374151]"}`}
                 />
               </div>
               <span
                 className={`text-xs leading-tight ${
-                  active ? "text-[#0A1F44] font-medium" : "text-gray-600"
+                  active ? "text-[#0A1F44] font-medium" : "text-[#374151]"
                 }`}
               >
                 {label}

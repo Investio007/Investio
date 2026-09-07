@@ -21,7 +21,15 @@ create table if not exists public.portfolio_items (
 );
 
 alter table public.profiles enable row level security;
+alter table public.profiles force row level security;
 alter table public.portfolio_items enable row level security;
+alter table public.portfolio_items force row level security;
+
+-- No table privileges for anon (RLS alone is not enough if grants are too broad).
+revoke all on table public.profiles from anon;
+revoke all on table public.portfolio_items from anon;
+grant select, insert, update, delete on table public.profiles to authenticated;
+grant select, insert, update, delete on table public.portfolio_items to authenticated;
 
 create policy "profiles_select_own"
   on public.profiles for select
@@ -33,6 +41,10 @@ create policy "profiles_insert_own"
 
 create policy "profiles_update_own"
   on public.profiles for update
+  using (auth.uid() = id);
+
+create policy "profiles_delete_own"
+  on public.profiles for delete
   using (auth.uid() = id);
 
 create policy "portfolio_select_own"

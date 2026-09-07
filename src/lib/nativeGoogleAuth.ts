@@ -6,7 +6,14 @@ import {
 import type { AuthError, SupabaseClient } from "@supabase/supabase-js";
 
 export function getGoogleWebClientId(): string | undefined {
-  return (import.meta.env.VITE_GOOGLE_WEB_CLIENT_ID as string | undefined)?.trim();
+  const fromVite = (
+    import.meta.env.VITE_GOOGLE_WEB_CLIENT_ID as string | undefined
+  )?.trim();
+  if (fromVite) return fromVite;
+  if (typeof window !== "undefined") {
+    return window.__CROWTH_ENV__?.VITE_GOOGLE_WEB_CLIENT_ID?.trim();
+  }
+  return undefined;
 }
 
 /** True when native Google Sign-In (in-app account picker) is available. */

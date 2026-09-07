@@ -5,6 +5,7 @@ import {
   QuoteData,
   marketApi,
   normalizeCompareCompany,
+  type ActuarialData,
   type CompareCompany,
   type CompareVerdict,
   type MarketInsight,
@@ -73,6 +74,15 @@ export function useMarketSnapshot(symbol: string, period: Period = "1D") {
         setQuote(snapshot.quote);
         setChart(snapshot.chart);
         setChartSource(snapshot.chartSource);
+        const quoteUnavailable =
+          snapshot.quote.available === false ||
+          snapshot.quote.source === "unavailable" ||
+          snapshot.quote.price == null;
+        setError(
+          quoteUnavailable
+            ? "Live price unavailable for this stock right now."
+            : null,
+        );
       })
       .catch((errorValue) => {
         if (!cancelled) {
@@ -115,9 +125,17 @@ export function useQuote(symbol: string) {
 
       try {
         const quote = await marketApi.getQuote(symbol);
-        if (!cancelled && quote.id === symbol) {
-          setData(quote);
+        if (cancelled || quote.id !== symbol) return;
+        if (
+          quote.available === false ||
+          quote.source === "unavailable" ||
+          quote.price == null
+        ) {
+          setData(null);
+          setError("Live price unavailable for this stock right now.");
+          return;
         }
+        setData(quote);
       } catch (errorValue) {
         if (!cancelled) {
           setError(
@@ -370,7 +388,16 @@ export function usePortfolioQuotes(assetIds: string[]) {
 
       results.forEach((result, index) => {
         if (result.status === "fulfilled") {
-          next[ids[index]] = result.value;
+          const quote = result.value;
+          if (
+            quote.available === false ||
+            quote.source === "unavailable" ||
+            quote.price == null
+          ) {
+            failures++;
+            return;
+          }
+          next[ids[index]] = quote;
         } else {
           failures++;
         }
@@ -395,4 +422,45 @@ export function usePortfolioQuotes(assetIds: string[]) {
   }, [idsKey]);
 
   return { quotes, loading, error };
+}
+
+export function useActuarial(
+  symbol: string,
+  investment: number = 10000,
+  horizon: number = 1,
+) {
+  const [data, setData] = useState<ActuarialData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!symbol) {
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+
+    setLoading(true);
+    setError(null);
+
+    marketApi
+      .getActuarial(symbol, investment, horizon)
+      .then((res) => {
+        if (!cancelled) setData(res);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Unknown error");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [symbol, investment, horizon]);
+
+  return { data, loading, error };
 }

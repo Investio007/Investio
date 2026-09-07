@@ -151,16 +151,17 @@ const enabledCount = [
   appleEnabled,
 ].filter(Boolean).length;
 
-if (enabledCount === 0) {
-  console.error(
-    "No OAuth provider secrets found. Add at least one provider to GitHub Secrets, then re-run.",
+const redirectOnly = enabledCount === 0;
+
+if (redirectOnly) {
+  console.log(
+    "○ No OAuth provider secrets in env — syncing Site URL + redirect allow list only.",
   );
-  process.exit(1);
 }
 
 console.log("\nSyncing Supabase Auth config...");
 console.log(`  Project: ${PROJECT_REF}`);
-console.log(`  Site URL: ${SITE_URL}`);
+console.log(`  Site URL: ${payload.site_url}`);
 console.log(`  Redirect allow list: ${uriAllowList}`);
 console.log(`  Supabase OAuth callback (use in Google/GitHub/Apple apps): ${supabaseCallback}\n`);
 
@@ -189,5 +190,55 @@ if (!response.ok) {
   process.exit(1);
 }
 
-console.log("OAuth providers synced to Supabase successfully.");
-console.log("Test at http://localhost:5173/auth after restarting the dev server.");
+if (redirectOnly) {
+  console.log("Auth redirect URLs synced to Supabase successfully.");
+} else {
+  console.log("OAuth providers synced to Supabase successfully.");
+}
+
+const deleteAccountSql = `
+grant delete on table public.profiles to authenticated;
+drop policy if exists profiles_delete_own on public.profiles;
+create policy profiles_delete_own on public.profiles for delete using (auth.uid() = id);
+create or replace function public.delete_own_account()
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  uid uuid := auth.uid();
+begin
+  if uid is null then
+    raise exception 'Not authenticated';
+  end if;
+  delete from public.portfolio_items where user_id = uid;
+  delete from public.profiles where id = uid;
+  delete from auth.users where id = uid;
+end;
+$$;
+revoke all on function public.delete_own_account() from public;
+grant execute on function public.delete_own_account() to authenticated;
+`.trim();
+
+console.log("\nEnsuring delete_own_account RPC exists...");
+const sqlResponse = await fetch(
+  `https://api.supabase.com/v1/projects/${PROJECT_REF}/database/query`,
+  {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${SUPABASE_ACCESS_TOKEN}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ query: deleteAccountSql }),
+  },
+);
+const sqlText = await sqlResponse.text();
+if (!sqlResponse.ok) {
+  console.error("Failed to apply delete_own_account SQL:", sqlResponse.status, sqlText);
+  process.exit(1);
+}
+console.log("delete_own_account RPC ready.");
+
+console.log("Test production auth at https://crowthza.app/auth");
+console.log("Test local auth at http://localhost:5173/auth after restarting the dev server.");

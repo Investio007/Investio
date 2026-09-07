@@ -19,6 +19,7 @@ import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Slider } from "../components/ui/slider";
+import { openAssetAnalysis } from "../lib/assetAnalysisNav";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -436,7 +437,14 @@ function PortfolioDetailPanel({
                 quote={quotes[asset.id]}
                 perHoldingValue={performance.perHoldingValue}
                 onRemove={() => onRemoveCompany(asset.id)}
-                onOpen={() => navigate(`/stock/${asset.id}`)}
+                onOpen={() =>
+                  openAssetAnalysis(navigate, {
+                    id: asset.id,
+                    ticker: asset.ticker,
+                    name: asset.name,
+                    asset,
+                  })
+                }
               />
             ))}
           </>
@@ -472,6 +480,11 @@ export function PortfolioBuilderScreen() {
 
   const pickableAssets = useMemo(() => getPickableAssets(), []);
   const portfolioData = getAllocationData(riskLevel[0]);
+  const demoAmount = Number(amount) || 0;
+  const allocationRows = portfolioData.map((item) => ({
+    ...item,
+    rand: Math.round((demoAmount * item.value) / 100),
+  }));
 
   const selectedPortfolio = portfolios.find(
     (item) => item.id === selectedPortfolioId,
@@ -682,9 +695,15 @@ export function PortfolioBuilderScreen() {
         </Card>
 
         <Card className="p-6 rounded-3xl shadow-sm border-0">
-          <h3 className="text-lg font-bold text-[#0A1F44] mb-4">
+          <h3 className="text-lg font-bold text-[#0A1F44] mb-1">
             Suggested allocation
           </h3>
+          <p className="text-sm text-gray-600 mb-4">
+            Based on {riskLabel(riskLevel[0]).toLowerCase()} risk
+            {demoAmount > 0
+              ? ` · R${demoAmount.toLocaleString("en-ZA")} demo amount`
+              : ""}
+          </p>
           <ResponsiveContainer width="100%" height={180}>
             <PieChart>
               <Pie
@@ -702,6 +721,44 @@ export function PortfolioBuilderScreen() {
               </Pie>
             </PieChart>
           </ResponsiveContainer>
+          <ul className="mt-2 space-y-3">
+            {allocationRows.map((row) => (
+              <li
+                key={row.name}
+                className="flex items-center justify-between gap-3"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <span
+                    className="h-3 w-3 shrink-0 rounded-full"
+                    style={{ backgroundColor: row.color }}
+                    aria-hidden
+                  />
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-[#0A1F44]">
+                      {row.name}
+                    </p>
+                    <p className="text-xs text-gray-500 truncate">
+                      {row.name === "Growth"
+                        ? "Higher growth companies"
+                        : row.name === "Balanced"
+                          ? "Mix of growth and income"
+                          : "More defensive holdings"}
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-sm font-bold text-[#0A1F44]">
+                    {row.value}%
+                  </p>
+                  {demoAmount > 0 && (
+                    <p className="text-xs text-gray-500">
+                      R{row.rand.toLocaleString("en-ZA")}
+                    </p>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
         </Card>
 
         <Button

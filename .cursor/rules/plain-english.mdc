@@ -1,0 +1,27 @@
+---
+description: Crowth user-facing English must stay Grade-9 simple (3–5 short sentences)
+alwaysApply: true
+---
+
+# Plain English (Grade 9 beginner)
+
+All **user-visible** Crowth copy must be easy for a Grade 9 English beginner.
+
+## Rules
+- Prefer short words and short sentences.
+- Keep explanations to **3–5 sentences** (never long essays).
+- Avoid hard finance jargon (alpha, sharpe, VaR, regime, momentum, actuarial).
+- If a number helps, keep it simple (%, R amounts).
+- Money display stays in **rand (R)** unless showing a conversion note.
+
+## Where this applies
+- Simple Explanation, AI Advisor replies, Home insights blurbs
+- Compare tips/verdicts, onboarding, errors, empty states, badges/labels
+- Worker-generated text (`actuarial`, `sentiment`, `ai`, insights predictions)
+
+## Do not
+- Dump textbook / academic wording into the UI
+- Show more than 5 explanation sentences in Simple Explanation
+- Use em-dashes packed with jargon
+
+When adding or editing copy, rewrite it in plain English before shipping.

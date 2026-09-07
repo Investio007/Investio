@@ -1,7 +1,11 @@
 import { createBrowserRouter, Navigate } from "react-router";
 import { AppShell } from "./components/AppShell";
 import { ProtectedRoute } from "./components/ProtectedRoute";
-import { hasOAuthCallbackParams } from "./lib/oauthRedirect";
+import { ScrollableScreen } from "./components/ScrollableScreen";
+import {
+  hasOAuthCallbackParams,
+  resolveAuthHandoffTarget,
+} from "./lib/oauthRedirect";
 import { SplashScreen } from "./screens/SplashScreen";
 import { OnboardingScreen } from "./screens/OnboardingScreen";
 import { AuthScreen } from "./screens/AuthScreen";
@@ -21,7 +25,7 @@ export const router = createBrowserRouter([
     path: "/",
     Component: () =>
       hasOAuthCallbackParams() ? (
-        <Navigate to="/auth/callback" replace />
+        <Navigate to={resolveAuthHandoffTarget()} replace />
       ) : (
         <Navigate to="/splash" />
       ),
@@ -80,23 +84,28 @@ export const router = createBrowserRouter([
             path: "/advisor",
             Component: AIAssistantScreen,
           },
+          {
+            path: "/stock/:symbol",
+            Component: StockAnalysisScreen,
+          },
+          {
+            path: "/analysis",
+            element: <Navigate to="/home" replace />,
+          },
         ],
       },
       {
-        path: "/stock/:symbol",
-        Component: StockAnalysisScreen,
-      },
-      {
-        path: "/analysis",
-        Component: StockAnalysisScreen,
-      },
-      {
-        path: "/add-demo-funds",
-        Component: AddDemoFundsScreen,
-      },
-      {
-        path: "/add-funds",
-        Component: AddDemoFundsScreen,
+        Component: ScrollableScreen,
+        children: [
+          {
+            path: "/add-demo-funds",
+            Component: AddDemoFundsScreen,
+          },
+          {
+            path: "/add-funds",
+            Component: AddDemoFundsScreen,
+          },
+        ],
       },
     ],
   },

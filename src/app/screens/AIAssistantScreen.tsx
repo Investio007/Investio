@@ -4,6 +4,7 @@ import { ArrowLeft, Send, Bot, User } from "lucide-react";
 import { Card } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { Button } from "../components/ui/button";
+import { ProfileDialog, ProfileMenuButton } from "../components/ProfileDialog";
 import { aiApi } from "../services/aiApi";
 import { captureEvent } from "../../lib/analytics";
 import { useVisualViewportPadding } from "../hooks/useVisualViewportPadding";
@@ -34,9 +35,9 @@ const getRiskColor = (risk: "Low" | "Moderate" | "High") => {
     case "Low":
       return "bg-[#007A4D]/10 text-[#007A4D]";
     case "Moderate":
-      return "bg-[#FFB612]/10 text-[#FFB612]";
+      return "bg-[#FFB612]/15 text-[#9A6700]";
     case "High":
-      return "bg-[#E03A3E]/10 text-[#E03A3E]";
+      return "bg-[#E03A3E]/10 text-[#C62828]";
   }
 };
 
@@ -45,6 +46,7 @@ export function AIAssistantScreen() {
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const keyboardPadding = useVisualViewportPadding();
 
@@ -81,30 +83,31 @@ export function AIAssistantScreen() {
 
   return (
     <div className="h-full min-h-0 flex flex-col bg-[#F5F7FA]">
-      {/* Header */}
-      <div className="bg-white px-6 screen-header pb-6 rounded-b-3xl shadow-sm">
-        <button
-          onClick={() => navigate(-1)}
-          className="mb-6 w-10 h-10 bg-[#F5F7FA] rounded-2xl flex items-center justify-center"
-        >
-          <ArrowLeft className="w-5 h-5 text-[#0A1F44]" />
-        </button>
+      <div className="shrink-0 bg-white px-6 screen-header pb-5 rounded-b-3xl shadow-sm">
+        <div className="flex items-center justify-between mb-5">
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            className="w-10 h-10 bg-[#F5F7FA] rounded-2xl flex items-center justify-center"
+            aria-label="Go back"
+          >
+            <ArrowLeft className="w-5 h-5 text-[#0A1F44]" />
+          </button>
+          <ProfileMenuButton onClick={() => setProfileOpen(true)} />
+        </div>
 
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 bg-[#0A1F44] rounded-2xl flex items-center justify-center">
             <Bot className="w-7 h-7 text-white" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-[#0A1F44]">
-              AI Assistant
-            </h1>
-            <p className="text-sm text-[#007A4D]">● Online</p>
+            <h1 className="text-xl font-bold text-[#0A1F44]">AI Assistant</h1>
+            <p className="text-sm font-medium text-[#006B43]">● Online</p>
           </div>
         </div>
       </div>
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-6 py-6 space-y-4">
+      <div className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain px-6 py-6 space-y-4 touch-pan-y">
         {messages.map((message, index) => (
           <div
             key={index}
@@ -112,12 +115,9 @@ export function AIAssistantScreen() {
               message.role === "user" ? "flex-row-reverse" : ""
             }`}
           >
-            {/* Avatar */}
             <div
               className={`w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0 ${
-                message.role === "user"
-                  ? "bg-[#0A1F44]"
-                  : "bg-[#F5F7FA]"
+                message.role === "user" ? "bg-[#0A1F44]" : "bg-white"
               }`}
             >
               {message.role === "user" ? (
@@ -127,7 +127,6 @@ export function AIAssistantScreen() {
               )}
             </div>
 
-            {/* Message Bubble */}
             <div className="flex-1 max-w-[75%]">
               <Card
                 className={`p-4 rounded-3xl shadow-sm border-0 ${
@@ -138,7 +137,7 @@ export function AIAssistantScreen() {
               >
                 <p
                   className={`leading-relaxed ${
-                    message.role === "user" ? "text-white" : "text-gray-700"
+                    message.role === "user" ? "text-white" : "text-[#0A1F44]"
                   }`}
                 >
                   {message.text}
@@ -148,7 +147,7 @@ export function AIAssistantScreen() {
                   <div className="mt-3 pt-3 border-t border-gray-200">
                     <div
                       className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-sm font-medium ${getRiskColor(
-                        message.risk
+                        message.risk,
                       )}`}
                     >
                       Risk Level: {message.risk}
@@ -159,16 +158,16 @@ export function AIAssistantScreen() {
             </div>
           </div>
         ))}
-        
-        {/* Suggested Questions */}
+
         {messages.length === 1 && (
           <div className="space-y-2">
-            <p className="text-sm text-gray-500 px-2">Try asking:</p>
+            <p className="text-sm font-medium text-[#0A1F44] px-2">Try asking:</p>
             {suggestedQuestions.map((question, index) => (
               <button
                 key={index}
+                type="button"
                 onClick={() => handleSend(question)}
-                className="w-full text-left p-3 bg-white rounded-2xl shadow-sm text-sm text-gray-700 hover:shadow-md transition-shadow"
+                className="w-full text-left p-3 bg-white rounded-2xl shadow-sm text-sm font-medium text-[#0A1F44] hover:shadow-md transition-shadow"
               >
                 {question}
               </button>
@@ -185,34 +184,36 @@ export function AIAssistantScreen() {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input */}
+      {/* Composer sits above MobileNav — no safe-area here (nav owns that). */}
       <div
-        className="shrink-0 bg-white border-t border-gray-200 px-6 py-4 safe-area-bottom"
+        className="shrink-0 bg-white border-t border-gray-200 px-4 py-3"
         style={
           keyboardPadding > 0
-            ? {
-                paddingBottom: `calc(${keyboardPadding}px + env(safe-area-inset-bottom, 0px))`,
-              }
+            ? { paddingBottom: `calc(${keyboardPadding}px + 0.75rem)` }
             : undefined
         }
       >
-        <div className="flex gap-3">
+        <div className="flex gap-3 items-center">
           <Input
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSend()}
             placeholder="Ask me anything..."
             maxLength={2000}
-            className="flex-1 h-12 rounded-2xl bg-[#F5F7FA] border-0 text-[#0A1F44] placeholder:text-gray-400"
+            className="flex-1 h-12 rounded-2xl bg-[#F5F7FA] border-0 text-[#0A1F44] placeholder:text-[#4B5563]"
           />
           <Button
+            type="button"
             onClick={() => handleSend()}
-            className="w-12 h-12 rounded-2xl bg-[#0A1F44] hover:bg-[#0A1F44]/90"
+            className="w-12 h-12 rounded-2xl bg-[#0A1F44] hover:bg-[#0A1F44]/90 shrink-0"
+            aria-label="Send message"
           >
             <Send className="w-5 h-5" />
           </Button>
         </div>
       </div>
+
+      <ProfileDialog open={profileOpen} onOpenChange={setProfileOpen} />
     </div>
   );
 }

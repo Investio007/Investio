@@ -5,11 +5,15 @@
 
 import { cacheGet, cacheGetStale, cacheSet } from "./lib/cache";
 import { chatWithWorkersAi, type AiBinding } from "./lib/ai";
-import { emptyQuote, fetchChart, fetchQuote, type ChartPoint, type QuoteData } from "./lib/finnhub";
+import { emptyQuote, fetchChart, fetchQuote, fetchQuoteLight, type ChartPoint, type QuoteData } from "./lib/finnhub";
+import { buildActuarialAnalysis } from "./lib/actuarial";
+import { getUsdFxRates, toZar, zarPerUnit, type FxRates } from "./lib/fx";
 import {
+  ASSET_DISPLAY_NAMES,
   COMPARE_ASSET_IDS,
   FINNHUB_PERIOD_MAP,
   INSIGHT_ASSET_IDS,
+  listingCurrency,
   resolveTicker,
 } from "./lib/symbols";
 import { buildSentiment, longTermScoreFromAnalysis } from "./lib/sentiment";
@@ -22,19 +26,106 @@ export interface Env {
   SUPABASE_URL?: string;
   /** Public anon key — injected into HTML for the SPA */
   SUPABASE_ANON_KEY?: string;
-  /** Optional fallback proxy if native handlers fail (legacy Railway). */
-  MARKET_API_ORIGIN?: string;
+  /** Public Google Web client ID — GIS sign-in on the app origin */
+  GOOGLE_WEB_CLIENT_ID?: string;
+  /** Service role for account deletion (never expose to the client) */
+  SUPABASE_SERVICE_ROLE_KEY?: string;
+}
+
+type ZarMoneyMeta = {
+  currencyNative: string;
+  priceNative: number | null;
+  fxRateToZar: number | null;
+  fxSource: string;
+};
+
+function quoteToZar(quote: QuoteData, fx: FxRates): QuoteData & ZarMoneyMeta {
+  const native = (quote.currency || "USD").toUpperCase();
+  const rate = zarPerUnit(native, fx);
+  return {
+    ...quote,
+    priceNative: quote.price,
+    currencyNative: native,
+    fxRateToZar: rate,
+    fxSource: fx.source,
+    price: toZar(quote.price, native, fx),
+    prevClose: toZar(quote.prevClose, native, fx),
+    change: toZar(quote.change, native, fx),
+    high: toZar(quote.high, native, fx),
+    low: toZar(quote.low, native, fx),
+    currency: "ZAR",
+  };
+}
+
+function chartToZar(
+  points: ChartPoint[],
+  fromCurrency: string,
+  fx: FxRates,
+): ChartPoint[] {
+  const rate = zarPerUnit(fromCurrency, fx);
+  if (rate == null || Math.abs(rate - 1) < 1e-9) return points;
+  return points.map((p) => ({
+    ...p,
+    open: p.open != null ? Math.round(p.open * rate * 100) / 100 : null,
+    high: p.high != null ? Math.round(p.high * rate * 100) / 100 : null,
+    low: p.low != null ? Math.round(p.low * rate * 100) / 100 : null,
+    close: Math.round(p.close * rate * 100) / 100,
+  }));
 }
 
 const SECURITY_HEADERS: Record<string, string> = {
   "X-Content-Type-Options": "nosniff",
   "X-Frame-Options": "DENY",
+  // Explicitly disable legacy XSS auditor; CSP is the modern control.
+  "X-XSS-Protection": "0",
   "Referrer-Policy": "strict-origin-when-cross-origin",
   "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
   "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+  // Isolation without COEP (COEP would break Google GIS / third-party scripts).
+  "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
+  "Cross-Origin-Resource-Policy": "same-origin",
 };
 
-const TTL = { quote: 60, chart: 300, compare: 60, insights: 60, sentiment: 300 };
+/** CSP for SPA + Google GIS + Supabase + PostHog/Sentry (bundled SDKs). */
+function buildContentSecurityPolicy(nonce?: string): string {
+  const scriptSrc = [
+    "'self'",
+    ...(nonce ? [`'nonce-${nonce}'`] : []),
+    "https://accounts.google.com",
+    "https://apis.google.com",
+  ].join(" ");
+
+  return [
+    "default-src 'self'",
+    `script-src ${scriptSrc}`,
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob: https:",
+    "font-src 'self' data:",
+    [
+      "connect-src 'self'",
+      "https://*.supabase.co",
+      "wss://*.supabase.co",
+      "https://accounts.google.com",
+      "https://oauth2.googleapis.com",
+      "https://www.googleapis.com",
+      "https://us.i.posthog.com",
+      "https://*.posthog.com",
+      "https://*.sentry.io",
+      "https://*.ingest.sentry.io",
+      "https://finnhub.io",
+    ].join(" "),
+    "frame-src https://accounts.google.com https://*.google.com",
+    "worker-src 'self' blob:",
+    "child-src 'self' blob:",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+    "upgrade-insecure-requests",
+  ].join("; ");
+}
+
+const TTL = { quote: 60, chart: 300, compare: 60, insights: 60, sentiment: 300, actuarial: 120 };
 const INSIGHT_TOP_N = 20;
 
 const COMPARE_BADGE_LABELS: Record<string, string> = {
@@ -43,11 +134,24 @@ const COMPARE_BADGE_LABELS: Record<string, string> = {
   stability: "Most stable",
 };
 
-function withSecurityHeaders(response: Response): Response {
+function withSecurityHeaders(
+  response: Response,
+  options?: { nonce?: string; html?: boolean },
+): Response {
   const headers = new Headers(response.headers);
   for (const [key, value] of Object.entries(SECURITY_HEADERS)) {
     headers.set(key, value);
   }
+  headers.set(
+    "Content-Security-Policy",
+    buildContentSecurityPolicy(options?.nonce),
+  );
+  if (options?.html) {
+    // Auth SPA HTML must not be cached by shared caches / BFCache scrapers.
+    headers.set("Cache-Control", "no-store, private");
+  }
+  // Cloudflare re-adds Server at the edge; deleting here has no lasting effect.
+  headers.delete("X-Powered-By");
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,
@@ -113,24 +217,59 @@ async function handleQuote(env: Env, symbolParam: string): Promise<Response> {
   try {
     ticker = resolveTicker(symbolParam);
   } catch {
-    return json({ detail: "Invalid or unsupported symbol" }, 400);
+    return json({ detail: "Invalid or unsupported symbol", available: false }, 400);
   }
 
   const cacheKey = `quote:${ticker}`;
   const { data: cached, fresh } = cacheGet<QuoteData>(cacheKey, TTL.quote);
-  if (fresh && cached) {
-    return json({ ...cached, id: symbolParam, stale: false, source: "cache" });
+  const token = (env.FINNHUB_API_KEY || "").trim();
+  const fx = await getUsdFxRates(token);
+
+  if (fresh && cached && (cached.price ?? 0) > 0) {
+    return json({
+      ...quoteToZar(cached, fx),
+      id: symbolParam,
+      stale: false,
+      source: "cache",
+      available: true,
+    });
   }
 
   try {
-    const token = requireToken(env);
-    const data = await fetchQuote(token, ticker);
+    const liveToken = requireToken(env);
+    const data = await fetchQuote(liveToken, ticker);
     cacheSet(cacheKey, data, TTL.quote);
-    return json({ ...data, id: symbolParam, stale: false, source: "live" });
+    return json({
+      ...quoteToZar(data, fx),
+      id: symbolParam,
+      stale: false,
+      source: "live",
+      available: true,
+    });
   } catch {
     const stale = cacheGetStale<QuoteData>(cacheKey);
-    if (stale) return json({ ...stale, id: symbolParam, stale: true, source: "stale_cache" });
-    return json({ ...emptyQuote(ticker), id: symbolParam, stale: true, source: "unavailable" });
+    if (stale && (stale.price ?? 0) > 0) {
+      return json({
+        ...quoteToZar(stale, fx),
+        id: symbolParam,
+        stale: true,
+        source: "stale_cache",
+        available: true,
+      });
+    }
+    return json(
+      {
+        detail: "Live price unavailable for this symbol right now.",
+        id: symbolParam,
+        ticker,
+        available: false,
+        stale: true,
+        source: "unavailable",
+        currency: "ZAR",
+        price: null,
+      },
+      503,
+    );
   }
 }
 
@@ -147,50 +286,108 @@ async function handleChart(env: Env, symbolParam: string, period: string): Promi
   }
 
   const cacheKey = `chart:${ticker}:${period}`;
+  const token = (env.FINNHUB_API_KEY || "").trim();
+  const fx = await getUsdFxRates(token);
+
+  // Infer listing currency from a cached quote when possible
+  const qHit = cacheGet<QuoteData>(`quote:${ticker}`, TTL.quote);
+  const listing =
+    qHit.data?.currency ||
+    listingCurrency(ticker, null);
+
   const { data: cached, fresh } = cacheGet<ChartPoint[]>(cacheKey, TTL.chart);
   if (fresh && cached?.length) {
+    const data = chartToZar(cached, listing, fx);
     return json({
       symbol: symbolParam,
       period,
-      data: cached,
-      count: cached.length,
+      data,
+      count: data.length,
+      currency: "ZAR",
+      currencyNative: listing,
       stale: false,
       source: "cache",
     });
   }
 
   try {
-    const token = requireToken(env);
-    const data = await fetchChart(token, ticker, period);
-    cacheSet(cacheKey, data, TTL.chart);
+    const liveToken = requireToken(env);
+    const native = await fetchChart(liveToken, ticker, period);
+    if (!native.length) throw new Error(`Empty chart for ${ticker}/${period}`);
+    cacheSet(cacheKey, native, TTL.chart);
+    const data = chartToZar(native, listing, fx);
     return json({
       symbol: symbolParam,
       period,
       data,
       count: data.length,
+      currency: "ZAR",
+      currencyNative: listing,
       stale: false,
       source: "live",
+      available: true,
     });
   } catch {
     const stale = cacheGetStale<ChartPoint[]>(cacheKey);
     if (stale?.length) {
+      const data = chartToZar(stale, listing, fx);
       return json({
         symbol: symbolParam,
         period,
-        data: stale,
-        count: stale.length,
+        data,
+        count: data.length,
+        currency: "ZAR",
+        currencyNative: listing,
         stale: true,
         source: "stale_cache",
+        available: true,
       });
     }
-    return json({
-      symbol: symbolParam,
-      period,
-      data: [],
-      count: 0,
-      stale: true,
-      source: "unavailable",
-    });
+
+    // Fall back to a simple trend from the live/cached quote so charts are never blank
+    let quoteForSynth: QuoteData | null =
+      (qHit.data && (qHit.data.price ?? 0) > 0 ? qHit.data : null) ??
+      cacheGetStale<QuoteData>(`quote:${ticker}`);
+    if ((!quoteForSynth || (quoteForSynth.price ?? 0) <= 0) && token) {
+      try {
+        quoteForSynth = await fetchQuoteLight(token, ticker);
+        cacheSet(`quote:${ticker}`, quoteForSynth, TTL.quote);
+      } catch {
+        quoteForSynth = null;
+      }
+    }
+
+    if (quoteForSynth && (quoteForSynth.price ?? 0) > 0) {
+      const zarQuote = quoteToZar(quoteForSynth, fx);
+      const data = syntheticChart(zarQuote, period);
+      return json({
+        symbol: symbolParam,
+        period,
+        data,
+        count: data.length,
+        currency: "ZAR",
+        currencyNative: listingCurrency(ticker, quoteForSynth.currency),
+        stale: true,
+        source: "synthetic",
+        available: true,
+      });
+    }
+
+    return json(
+      {
+        detail: "Chart data unavailable for this symbol right now.",
+        symbol: symbolParam,
+        period,
+        data: [],
+        count: 0,
+        currency: "ZAR",
+        currencyNative: listing,
+        stale: true,
+        source: "unavailable",
+        available: false,
+      },
+      503,
+    );
   }
 }
 
@@ -206,38 +403,54 @@ async function handleSnapshot(env: Env, symbolParam: string, period: string): Pr
 
   const quoteKey = `quote:${ticker}`;
   const chartKey = `chart:${ticker}:${period}`;
+  const token = (env.FINNHUB_API_KEY || "").trim();
+  const fx = await getUsdFxRates(token);
 
-  let quotePayload: QuoteData & { id: string; stale: boolean; source: string };
+  let nativeQuote: QuoteData;
+  let quoteSource = "unavailable";
+  let quoteStale = true;
   const qCached = cacheGet<QuoteData>(quoteKey, TTL.quote);
   if (qCached.fresh && qCached.data) {
-    quotePayload = { ...qCached.data, id: symbolParam, stale: false, source: "cache" };
+    nativeQuote = qCached.data;
+    quoteSource = "cache";
+    quoteStale = false;
   } else {
     try {
-      const token = requireToken(env);
-      const live = await fetchQuote(token, ticker);
+      const liveToken = requireToken(env);
+      const live = await fetchQuote(liveToken, ticker);
       cacheSet(quoteKey, live, TTL.quote);
-      quotePayload = { ...live, id: symbolParam, stale: false, source: "live" };
+      nativeQuote = live;
+      quoteSource = "live";
+      quoteStale = false;
     } catch {
       const stale = cacheGetStale<QuoteData>(quoteKey);
-      quotePayload = stale
-        ? { ...stale, id: symbolParam, stale: true, source: "stale_cache" }
-        : { ...emptyQuote(ticker), id: symbolParam, stale: true, source: "unavailable" };
+      nativeQuote = stale ?? emptyQuote(ticker);
+      quoteSource = stale ? "stale_cache" : "unavailable";
+      quoteStale = true;
     }
   }
+
+  const quotePayload = {
+    ...quoteToZar(nativeQuote, fx),
+    id: symbolParam,
+    stale: quoteStale,
+    source: quoteSource,
+    available: (nativeQuote.price ?? 0) > 0 && quoteSource !== "unavailable",
+  };
 
   let chartData: ChartPoint[] = [];
   let chartSource = "synthetic";
   const cCached = cacheGet<ChartPoint[]>(chartKey, TTL.chart);
   if (cCached.fresh && cCached.data?.length) {
-    chartData = cCached.data;
+    chartData = chartToZar(cCached.data, nativeQuote.currency, fx);
     chartSource = "cache";
-  } else if (env.FINNHUB_API_KEY) {
+  } else if (token) {
     try {
-      const liveChart = await fetchChart(env.FINNHUB_API_KEY, ticker, period);
+      const liveChart = await fetchChart(token, ticker, period);
       if (liveChart.length) {
-        chartData = liveChart;
-        chartSource = "live";
         cacheSet(chartKey, liveChart, TTL.chart);
+        chartData = chartToZar(liveChart, nativeQuote.currency, fx);
+        chartSource = "live";
       }
     } catch {
       /* fall through to synthetic */
@@ -245,6 +458,7 @@ async function handleSnapshot(env: Env, symbolParam: string, period: string): Pr
   }
 
   if (!chartData.length && quotePayload.price != null) {
+    // Synthetic chart from already-converted ZAR quote
     chartData = syntheticChart(quotePayload, period);
     chartSource = "synthetic";
   }
@@ -256,6 +470,10 @@ async function handleSnapshot(env: Env, symbolParam: string, period: string): Pr
       period,
       data: chartData,
       count: chartData.length,
+      currency: "ZAR",
+      currencyNative: nativeQuote.currency,
+      available: chartData.length > 0,
+      source: chartSource,
     },
     chartSource,
   });
@@ -272,23 +490,23 @@ function applyAiInsight(
   let rating: string;
   let ratingColor: string;
   if (rank <= 3 && change >= 2) {
-    prediction = `AI #${rank} pick — strongest live momentum, likely to lead today`;
+    prediction = `This stock is up ${change.toFixed(1)}% today. It is one of today's stronger moves.`;
     rating = "Strong Buy";
     ratingColor = "green";
   } else if (change >= 1.5) {
-    prediction = "AI sees continued upside from today's live market strength";
+    prediction = `This stock is up ${change.toFixed(1)}% today. That looks positive for now.`;
     rating = "Buy";
     ratingColor = "green";
   } else if (change >= 0.5) {
-    prediction = "AI flags steady gains — good short-term hold candidate";
+    prediction = `This stock is up a little today (${change.toFixed(1)}%). It is holding steady.`;
     rating = "Hold";
     ratingColor = "gold";
   } else if (change >= 0) {
-    prediction = "AI notes modest gains — watch for breakout confirmation";
+    prediction = `This stock is almost flat today (${change.toFixed(1)}%). Wait and watch.`;
     rating = "Hold";
     ratingColor = "gold";
   } else {
-    prediction = "AI ranks lower today — weaker live session vs peers";
+    prediction = `This stock is down ${Math.abs(change).toFixed(1)}% today. It is weaker than many peers.`;
     rating = "Caution";
     ratingColor = "red";
   }
@@ -297,53 +515,121 @@ function applyAiInsight(
 }
 
 async function handleInsights(env: Env): Promise<Response> {
-  const cacheKey = "insights:top20";
+  const cacheKey = "insights:top20:zar:v3";
   const { data: cached, fresh } = cacheGet<Record<string, unknown>>(cacheKey, TTL.insights);
-  if (fresh && cached) return json({ ...cached, stale: cached.stale ?? false, source: "cache" });
-
-  const token = (env.FINNHUB_API_KEY || "").trim();
-  const items: Record<string, unknown>[] = [];
-
-  // Batch in parallel with a modest concurrency cap
-  const batchSize = 6;
-  for (let i = 0; i < INSIGHT_ASSET_IDS.length; i += batchSize) {
-    const batch = INSIGHT_ASSET_IDS.slice(i, i + batchSize);
-    const results = await Promise.all(
-      batch.map(async (assetId) => {
-        try {
-          const ticker = resolveTicker(assetId);
-          const qKey = `quote:${ticker}`;
-          const hit = cacheGet<QuoteData>(qKey, TTL.quote);
-          let data = hit.fresh ? hit.data : null;
-          if (!data && token) {
-            data = await fetchQuote(token, ticker);
-            cacheSet(qKey, data, TTL.quote);
-          } else if (!data) {
-            data = cacheGetStale<QuoteData>(qKey);
-          }
-          if (!data || data.price == null || data.changePercent == null) return null;
-          return {
-            id: assetId,
-            ticker,
-            name: data.name || assetId.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
-            price: data.price,
-            change: data.change,
-            changePercent: data.changePercent,
-            changePositive: data.changePositive,
-            currency: data.currency || "USD",
-          };
-        } catch {
-          return null;
-        }
-      }),
-    );
-    for (const row of results) if (row) items.push(row);
+  if (
+    fresh &&
+    cached &&
+    Array.isArray(cached.assets) &&
+    (cached.assets as unknown[]).length >= 15
+  ) {
+    return json({ ...cached, stale: cached.stale ?? false, source: "cache" });
   }
 
-  const ranked = items
+  const staleBoard = cacheGetStale<Record<string, unknown>>(cacheKey);
+  const token = (env.FINNHUB_API_KEY || "").trim();
+  const fx = await getUsdFxRates(token);
+  const byId = new Map<string, Record<string, unknown>>();
+
+  async function fetchInsightRow(assetId: string): Promise<Record<string, unknown> | null> {
+    try {
+      const ticker = resolveTicker(assetId);
+      const qKey = `quote:${ticker}`;
+      const hit = cacheGet<QuoteData>(qKey, TTL.quote);
+      // Prefer any usable quote (fresh or not) before hitting Finnhub again
+      let data =
+        hit.data && (hit.data.price ?? 0) > 0 && hit.data.changePercent != null
+          ? hit.data
+          : null;
+
+      if (!data && token) {
+        data = await fetchQuoteLight(token, ticker);
+        cacheSet(qKey, data, TTL.quote);
+      } else if (!data) {
+        const stale = cacheGetStale<QuoteData>(qKey);
+        data = stale && (stale.price ?? 0) > 0 ? stale : null;
+      }
+
+      if (!data || data.price == null || data.price <= 0 || data.changePercent == null) {
+        return null;
+      }
+
+      const nativeCurrency = listingCurrency(ticker, data.currency);
+      const priceZar = toZar(data.price, nativeCurrency, fx);
+      if (priceZar == null || priceZar <= 0) return null;
+
+      const displayName =
+        ASSET_DISPLAY_NAMES[assetId] ||
+        data.name ||
+        assetId.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+
+      return {
+        id: assetId,
+        ticker,
+        name: displayName,
+        price: priceZar,
+        priceNative: data.price,
+        change: toZar(data.change, nativeCurrency, fx),
+        changePercent: data.changePercent,
+        changePositive: data.changePositive,
+        currency: "ZAR",
+        currencyNative: nativeCurrency,
+        fxRateToZar: zarPerUnit(nativeCurrency, fx),
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  async function runBatches(ids: string[], batchSize: number, pauseMs: number) {
+    for (let i = 0; i < ids.length; i += batchSize) {
+      const batch = ids.slice(i, i + batchSize);
+      const results = await Promise.all(batch.map((id) => fetchInsightRow(id)));
+      for (const row of results) {
+        if (row?.id) byId.set(String(row.id), row);
+      }
+      if (i + batchSize < ids.length && token && pauseMs > 0) {
+        await new Promise((r) => setTimeout(r, pauseMs));
+      }
+    }
+  }
+
+  // Pass 1: priority-ordered universe
+  await runBatches(INSIGHT_ASSET_IDS, 5, 60);
+
+  // Pass 2: retry misses once (fills Top 20 under rate limits)
+  const missing = INSIGHT_ASSET_IDS.filter((id) => !byId.has(id));
+  if (missing.length && byId.size < INSIGHT_TOP_N && token) {
+    await new Promise((r) => setTimeout(r, 200));
+    await runBatches(missing, 3, 100);
+  }
+
+  // Pass 3: slower retry for stubborn misses
+  const stillMissing = INSIGHT_ASSET_IDS.filter((id) => !byId.has(id));
+  if (stillMissing.length && byId.size < INSIGHT_TOP_N && token) {
+    await new Promise((r) => setTimeout(r, 350));
+    await runBatches(stillMissing.slice(0, INSIGHT_TOP_N - byId.size + 5), 2, 150);
+  }
+
+  const ranked = Array.from(byId.values())
     .sort((a, b) => Number(b.changePercent) - Number(a.changePercent))
     .slice(0, INSIGHT_TOP_N)
     .map((item, idx) => applyAiInsight(item, idx + 1));
+
+  // Prefer a fuller stale board over a thin live rebuild (cold Finnhub)
+  if (
+    ranked.length < 15 &&
+    staleBoard &&
+    Array.isArray(staleBoard.assets) &&
+    (staleBoard.assets as unknown[]).length >= 15
+  ) {
+    return json({
+      ...staleBoard,
+      stale: true,
+      source: "stale_cache",
+      note: "Serving last full board while live quotes catch up.",
+    });
+  }
 
   const payload = {
     assets: ranked,
@@ -351,25 +637,30 @@ async function handleInsights(env: Env): Promise<Response> {
     updatedAt: new Date().toISOString(),
     stale: ranked.length < INSIGHT_TOP_N,
     source: "live",
+    displayCurrency: "ZAR",
+    fxSource: fx.source,
+    fxUpdatedAt: fx.updatedAt,
   };
-  cacheSet(cacheKey, payload, TTL.insights);
+
+  cacheSet(cacheKey, payload, ranked.length >= 15 ? TTL.insights : 10);
   return json(payload);
 }
 
 async function handleCompare(env: Env): Promise<Response> {
-  const cacheKey = "compare:full";
+  const cacheKey = "compare:full:zar:v1";
   const { data: cached, fresh } = cacheGet<Record<string, unknown>>(cacheKey, TTL.compare);
   if (
     fresh &&
     cached &&
     Array.isArray(cached.companies) &&
-    cached.compareVersion === 2 &&
+    cached.compareVersion === 3 &&
     cached.verdict
   ) {
     return json({ ...cached, stale: false, source: "cache" });
   }
 
   const token = (env.FINNHUB_API_KEY || "").trim();
+  const fx = await getUsdFxRates(token);
   const companies = await Promise.all(
     COMPARE_ASSET_IDS.map(async (assetId) => {
       const ticker = resolveTicker(assetId);
@@ -387,16 +678,20 @@ async function handleCompare(env: Env): Promise<Response> {
       const sentiment = buildSentiment(assetId, ticker);
       const longTermScore = longTermScoreFromAnalysis(sentiment.analysis);
       const changePct = quote?.changePercent ?? null;
+      const nativeCurrency = listingCurrency(ticker, quote?.currency);
 
       return {
         id: assetId,
         ticker,
         name,
-        price: quote?.price ?? null,
-        change: quote?.change ?? null,
+        price: toZar(quote?.price ?? null, nativeCurrency, fx),
+        priceNative: quote?.price ?? null,
+        change: toZar(quote?.change ?? null, nativeCurrency, fx),
         changePercent: changePct,
         changePositive: quote?.changePositive ?? (changePct ?? 0) >= 0,
-        currency: quote?.currency || "USD",
+        currency: "ZAR",
+        currencyNative: nativeCurrency,
+        fxRateToZar: zarPerUnit(nativeCurrency, fx),
         aiScore: sentiment.aiScore,
         rating: sentiment.rating,
         explanation: sentiment.explanation,
@@ -418,13 +713,13 @@ async function handleCompare(env: Env): Promise<Response> {
   if (analysis.growth.pct >= 65) strengths.push("healthy growth");
   const strengthText = strengths.length ? strengths.join(", ") : "balanced company health";
 
-  let summary = `Based on live market prices and company health scores, ${winner.name} scores highest for holding 5+ years. It stands out for ${strengthText}.`;
+  let summary = `${winner.name} looks like the best long-term pick here. It scores well for ${strengthText}.`;
   if (runner) {
     const gap = winner.longTermScore - runner.longTermScore;
     summary +=
       gap >= 8
-        ? ` It leads ${runner.name} by a clear margin — a safer long-term pick right now.`
-        : ` It's close with ${runner.name}. Both are solid, but ${winner.name} edges ahead overall.`;
+        ? ` It is clearly ahead of ${runner.name}.`
+        : ` It is close with ${runner.name}, but still ahead.`;
   }
 
   const verdict = {
@@ -432,9 +727,9 @@ async function handleCompare(env: Env): Promise<Response> {
     headline: `${winner.name} is the best long-term pick here`,
     summary,
     tips: [
-      "Think in years, not days — short dips are normal.",
-      "Don't put all your money in one company; spread across 2–3 strong picks.",
-      "Scores refresh with live data — check back monthly.",
+      "Think in years, not days. Short drops are normal.",
+      "Do not put all your money in one stock. Split across 2 or 3.",
+      "Check again every month. Scores can change.",
     ],
   };
 
@@ -460,7 +755,10 @@ async function handleCompare(env: Env): Promise<Response> {
     updatedAt: new Date().toISOString(),
     stale: companies.some((c) => c.price == null),
     source: "live",
-    compareVersion: 2,
+    compareVersion: 3,
+    displayCurrency: "ZAR",
+    fxSource: fx.source,
+    fxUpdatedAt: fx.updatedAt,
   };
   cacheSet(cacheKey, payload, TTL.compare);
   return json(payload);
@@ -509,6 +807,55 @@ async function handleAiChat(request: Request, env: Env): Promise<Response> {
   }
 }
 
+async function handleDeleteAccount(request: Request, env: Env): Promise<Response> {
+  const supabaseUrl = (env.SUPABASE_URL || "").trim().replace(/\/+$/, "");
+  const serviceKey = (env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+  const anonKey = (env.SUPABASE_ANON_KEY || "").trim();
+  if (!supabaseUrl || !serviceKey) {
+    return json(
+      {
+        detail:
+          "Account deletion is not configured. Add SUPABASE_SERVICE_ROLE_KEY to the Worker.",
+      },
+      503,
+    );
+  }
+
+  const authHeader = request.headers.get("Authorization") || "";
+  const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+  if (!token) return json({ detail: "Missing authorization" }, 401);
+
+  const verifyKey = anonKey || serviceKey;
+  const userRes = await fetch(`${supabaseUrl}/auth/v1/user`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      apikey: verifyKey,
+    },
+  });
+  if (!userRes.ok) {
+    return json({ detail: "Invalid or expired session" }, 401);
+  }
+  const user = (await userRes.json()) as { id?: string };
+  if (!user.id) return json({ detail: "Invalid user" }, 401);
+
+  const delRes = await fetch(`${supabaseUrl}/auth/v1/admin/users/${user.id}`, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${serviceKey}`,
+      apikey: serviceKey,
+    },
+  });
+  if (!delRes.ok) {
+    const detail = await delRes.text();
+    return json(
+      { detail: detail || "Failed to delete account" },
+      delRes.status >= 400 && delRes.status < 600 ? delRes.status : 502,
+    );
+  }
+
+  return json({ status: "deleted" });
+}
+
 async function handleApi(request: Request, env: Env, url: URL): Promise<Response> {
   const path = url.pathname.replace(/\/+$/, "") || "/";
   const method = request.method.toUpperCase();
@@ -519,17 +866,32 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
         status: 204,
         headers: {
           "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+          "Access-Control-Allow-Methods": "GET, HEAD, POST, DELETE, OPTIONS",
           "Access-Control-Allow-Headers": "Content-Type, Authorization",
         },
       }),
     );
   }
 
-  if (method === "GET" && (path === "/api/health" || path === "/health")) {
+  if (
+    (method === "GET" || method === "HEAD") &&
+    (path === "/api/health" || path === "/health")
+  ) {
+    if (method === "HEAD") {
+      return withSecurityHeaders(
+        new Response(null, {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json",
+            "Cache-Control": "no-store",
+          },
+        }),
+      );
+    }
     return json({
       status: "ok",
       timestamp: new Date().toISOString(),
+      displayCurrency: "ZAR",
       market_data: {
         primary: "finnhub",
         finnhub: Boolean(env.FINNHUB_API_KEY),
@@ -545,8 +907,25 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     return handleAiChat(request, env);
   }
 
+  if (method === "DELETE" && path === "/api/account") {
+    return handleDeleteAccount(request, env);
+  }
+
   if (method === "GET" && path === "/api/compare") return handleCompare(env);
   if (method === "GET" && path === "/api/insights") return handleInsights(env);
+
+  if (method === "GET" && path === "/api/fx") {
+    const token = (env.FINNHUB_API_KEY || "").trim();
+    const fx = await getUsdFxRates(token);
+    return json({
+      displayCurrency: "ZAR",
+      base: fx.base,
+      usdZar: fx.rates.ZAR,
+      rates: fx.rates,
+      source: fx.source,
+      updatedAt: fx.updatedAt,
+    });
+  }
 
   const quoteMatch = path.match(/^\/api\/quote\/([^/]+)$/);
   if (method === "GET" && quoteMatch) return handleQuote(env, decodeURIComponent(quoteMatch[1]));
@@ -570,7 +949,70 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     return handleSentiment(decodeURIComponent(sentimentMatch[1]));
   }
 
+  // Actuarial engine — native TypeScript (Hardy / Lo / Hull / Barucci / Wüthrich)
+  const actuarialMatch = path.match(/^\/api\/actuarial\/([^/]+)$/);
+  if ((method === "GET" || method === "HEAD") && actuarialMatch) {
+    return handleActuarial(
+      env,
+      decodeURIComponent(actuarialMatch[1]),
+      url.searchParams,
+      method === "HEAD",
+    );
+  }
+
   return json({ detail: "Not found" }, 404);
+}
+
+async function handleActuarial(
+  env: Env,
+  symbolParam: string,
+  searchParams: URLSearchParams,
+  headOnly: boolean,
+): Promise<Response> {
+  const investment = Number(searchParams.get("investment") || 10000);
+  const horizon = Number(searchParams.get("horizon") || 1);
+  const assetId = symbolParam.toLowerCase().trim();
+  const cacheKey = `actuarial:v2:${assetId}:${Math.round(investment)}:${horizon}`;
+
+  const { data: cached, fresh } = cacheGet<Record<string, unknown>>(
+    cacheKey,
+    TTL.actuarial,
+  );
+  if (fresh && cached) {
+    if (headOnly) {
+      return withSecurityHeaders(
+        new Response(null, {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json",
+            "Cache-Control": "no-store",
+          },
+        }),
+      );
+    }
+    return json({ ...cached, source: "cache" });
+  }
+
+  const result = await buildActuarialAnalysis(
+    assetId,
+    investment,
+    horizon,
+    env.FINNHUB_API_KEY,
+  );
+  cacheSet(cacheKey, result, TTL.actuarial);
+
+  if (headOnly) {
+    return withSecurityHeaders(
+      new Response(null, {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+        },
+      }),
+    );
+  }
+  return json(result);
 }
 
 /** Bake public Supabase config into HTML so CF Git builds work without Vite build vars. */
@@ -583,14 +1025,19 @@ async function serveAssets(request: Request, env: Env): Promise<Response> {
 
   const supabaseUrl = (env.SUPABASE_URL || "").trim();
   const supabaseAnonKey = (env.SUPABASE_ANON_KEY || "").trim();
+  const googleWebClientId = (env.GOOGLE_WEB_CLIENT_ID || "").trim();
   if (!supabaseUrl || !supabaseAnonKey) {
-    return withSecurityHeaders(assetResponse);
+    return withSecurityHeaders(assetResponse, { html: true });
   }
 
   const html = await assetResponse.text();
-  const boot = `<script>window.__CROWTH_ENV__=${JSON.stringify({
+  const nonce = crypto.randomUUID().replace(/-/g, "");
+  const boot = `<script nonce="${nonce}">window.__CROWTH_ENV__=${JSON.stringify({
     VITE_SUPABASE_URL: supabaseUrl,
     VITE_SUPABASE_ANON_KEY: supabaseAnonKey,
+    ...(googleWebClientId
+      ? { VITE_GOOGLE_WEB_CLIENT_ID: googleWebClientId }
+      : {}),
   })};</script>`;
   const patched = html.includes("</head>")
     ? html.replace("</head>", `${boot}</head>`)
@@ -604,6 +1051,7 @@ async function serveAssets(request: Request, env: Env): Promise<Response> {
       statusText: assetResponse.statusText,
       headers,
     }),
+    { nonce, html: true },
   );
 }
 

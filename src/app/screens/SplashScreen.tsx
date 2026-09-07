@@ -29,7 +29,7 @@ export function SplashScreen() {
           <TrendingUp className="w-12 h-12 text-[#0A1F44]" />
         </div>
         <div className="text-center">
-          <h1 className="text-4xl font-bold text-white mb-2">Crowth</h1>
+          <h1 className="text-4xl font-bold text-white mb-2">Welcome to Crowth</h1>
           <p className="text-white/80 text-lg">Invest Smarter</p>
         </div>
       </div>

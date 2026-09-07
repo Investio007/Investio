@@ -46,22 +46,22 @@ function plainExplanation(
   stability: number,
   competition: number,
 ): string {
-  const parts: string[] = [];
-  if (growth >= 65) parts.push("This company is growing fast");
-  else if (growth >= 40) parts.push("This company is growing slowly");
-  else parts.push("This company is not growing much right now");
+  const lines: string[] = [];
+  if (growth >= 65) lines.push("This company is growing fast.");
+  else if (growth >= 40) lines.push("This company is growing slowly.");
+  else lines.push("This company is not growing much right now.");
 
-  if (profit >= 65) parts.push("it makes good money");
-  else if (profit >= 40) parts.push("it makes some money");
-  else parts.push("it is not making much profit");
+  if (profit >= 65) lines.push("It makes good money.");
+  else if (profit >= 40) lines.push("It makes some money.");
+  else lines.push("It is not making much profit.");
 
-  if (stability < 40) parts.push("but the price goes up and down a lot");
-  else if (stability >= 65) parts.push("and the price is quite stable");
+  if (stability < 40) lines.push("The price goes up and down a lot.");
+  else if (stability >= 65) lines.push("The price is quite stable.");
 
-  if (competition < 40) parts.push("The news about this company is not great right now");
-  else if (competition >= 65) parts.push("The news about this company is mostly positive");
+  if (competition < 40) lines.push("The news is not great right now.");
+  else if (competition >= 65) lines.push("The news is mostly positive.");
 
-  return parts.map((p, i) => (i === 0 ? p : p.charAt(0).toUpperCase() + p.slice(1))).join(". ") + ".";
+  return lines.slice(0, 5).join(" ");
 }
 
 export function buildSentiment(assetId: string, ticker: string) {
