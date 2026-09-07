@@ -6,9 +6,11 @@ import {
   establishSessionFromUrl,
   friendlyAuthError,
   getAuthErrorFromUrl,
+  getAuthCodeFromUrl,
   hasPendingPasswordRecovery,
   isCodeVerifierError,
   isPasswordRecoveryFromUrl,
+  looksLikeEmailConfirmCallback,
 } from "../lib/authSessionFromUrl";
 
 export function AuthCallbackScreen() {
@@ -24,6 +26,10 @@ export function AuthCallbackScreen() {
     const client = supabase;
     let mounted = true;
 
+    const goSignIn = (notice: string) => {
+      navigate("/auth", { replace: true, state: { notice, preferLogin: true } });
+    };
+
     const run = async () => {
       const authError = getAuthErrorFromUrl();
       if (authError) {
@@ -35,6 +41,10 @@ export function AuthCallbackScreen() {
             navigate("/home", { replace: true });
             return;
           }
+          goSignIn(
+            "Your email is already confirmed. Sign in with your email and password.",
+          );
+          return;
         }
         setError(friendlyAuthError(authError));
         return;
@@ -46,6 +56,9 @@ export function AuthCallbackScreen() {
         return;
       }
 
+      const hadAuthParams =
+        Boolean(getAuthCodeFromUrl()) || looksLikeEmailConfirmCallback();
+
       const { session, error: sessionError } = await establishSessionFromUrl(client);
       if (!mounted) return;
 
@@ -55,7 +68,9 @@ export function AuthCallbackScreen() {
           navigate(`/auth/reset-password${suffix}`, { replace: true });
           return;
         }
-        setError(friendlyAuthError(sessionError));
+        // Email confirm often succeeds server-side even when PKCE verifier is missing
+        // (temp-mail / different browser / multiple signup tabs).
+        goSignIn(friendlyAuthError(sessionError));
         return;
       }
 
@@ -65,10 +80,14 @@ export function AuthCallbackScreen() {
       }
 
       if (!session) {
-        setError(
-          friendlyAuthError(
-            "Sign in timed out. Clear site data for this app and try again in the same browser tab.",
-          ),
+        if (hadAuthParams || looksLikeEmailConfirmCallback()) {
+          goSignIn(
+            "Your email is confirmed. Sign in with your email and password.",
+          );
+          return;
+        }
+        goSignIn(
+          "Sign-in link expired or was opened incorrectly. Sign in here, or open the email link once in this same browser.",
         );
         return;
       }

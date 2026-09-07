@@ -40,7 +40,12 @@ export function LegalPolicyScreen() {
       <h1 className="text-2xl sm:text-3xl font-bold text-[#0A1F44] mb-1">
         {policy.title}
       </h1>
-      <p className="text-xs text-gray-500 mb-6">Last updated: {policy.updated}</p>
+      <p className="text-xs text-gray-500 mb-1">Last updated: {policy.updated}</p>
+      {policy.subtitle ? (
+        <p className="text-xs text-gray-500 mb-6 leading-relaxed">{policy.subtitle}</p>
+      ) : (
+        <div className="mb-6" />
+      )}
 
       <div className="space-y-5">
         {policy.sections.map((section) => (
@@ -48,7 +53,9 @@ export function LegalPolicyScreen() {
             <h2 className="text-sm font-semibold text-[#0A1F44] mb-1.5">
               {section.heading}
             </h2>
-            <p className="text-sm text-gray-600 leading-relaxed">{section.body}</p>
+            <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap">
+              {section.body}
+            </p>
           </section>
         ))}
       </div>

@@ -146,7 +146,12 @@ export async function saveUserAppData(user: User, data: UserAppData): Promise<vo
 
 export async function signUpWithEmail(email: string, password: string) {
   const client = requireClient();
-  return client.auth.signUp({ email, password });
+  const emailRedirectTo = getAuthRedirectUrl();
+  return client.auth.signUp({
+    email,
+    password,
+    options: emailRedirectTo ? { emailRedirectTo } : undefined,
+  });
 }
 
 export async function signInWithEmail(email: string, password: string) {

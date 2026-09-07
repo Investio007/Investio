@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link, useNavigate } from "react-router";
+import { useEffect, useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { AuthPageLayout } from "../components/AuthPageLayout";
@@ -15,15 +15,29 @@ import {
 import { isSupabaseConfigured } from "../../lib/supabase";
 import { MIN_PASSWORD_LENGTH } from "../lib/authConstants";
 
+type AuthLocationState = {
+  notice?: string;
+  preferLogin?: boolean;
+};
+
 export function AuthScreen() {
-  const [isLogin, setIsLogin] = useState(false);
+  const location = useLocation();
+  const locationState = (location.state as AuthLocationState | null) ?? null;
+  const [isLogin, setIsLogin] = useState(Boolean(locationState?.preferLogin));
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
+  const [notice, setNotice] = useState(locationState?.notice ?? "");
   const [loading, setLoading] = useState(false);
   const [oauthLoading, setOauthLoading] = useState<OAuthProvider | null>(null);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!locationState?.notice && !locationState?.preferLogin) return;
+    if (locationState.notice) setNotice(locationState.notice);
+    if (locationState.preferLogin) setIsLogin(true);
+    navigate(location.pathname, { replace: true, state: null });
+  }, [location.pathname, locationState, navigate]);
 
   const handleOAuth = async (provider: OAuthProvider) => {
     setError("");
